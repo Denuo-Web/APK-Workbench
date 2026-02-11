@@ -83,6 +83,16 @@ Update this file whenever UI behavior changes or when commits touching this crat
 - Projects page removed an unused project-id setter to keep builds warning-free.
 - Targets list auto-fills the active target id when missing, and Cuttlefish start completion updates it from adb_serial.
 - Targets launch can infer the application id from an APK path rooted in a project when the field is empty, and APK selection/build output can auto-fill the app id (Targets and Workflow pages; Workflow includes an APK browse button and auto-enables Install APK when a path is chosen).
+- Targets now tracks Cuttlefish state updates from status/start/stop responses and adjusts the
+  Start/Stop button enabled state accordingly; the Status button label includes the latest known
+  state (for example `Status (running)`).
+- Targets keeps Stop enabled for non-running states so stale Cuttlefish instances can still be
+  cleaned up even when status probes report stopped/error.
+- Targets start/stop/status RPC failures are logged in the Targets console instead of failing
+  silently in the worker thread.
+- Targets worker now refreshes Cuttlefish status automatically after terminal start/stop job events
+  (success/failed/cancelled) so the status label/button state does not stay stuck at
+  `Status (starting)`/`Status (stopping)` until manual refresh.
 - State archive Save/Open dialogs clone their queue callbacks per click so GTK can reuse the button handlers.
 - Project templates auto-load on app startup and whenever the Projects tab becomes visible.
 - UI sources are kept rustfmt-formatted to align with workspace style.

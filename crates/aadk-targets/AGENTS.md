@@ -29,6 +29,43 @@ Update this file whenever TargetService behavior changes or when commits touchin
   android-cuttlefish apt repo install command. Other distros require a custom install command.
   Per-request branch/target/build_id overrides are supported via ResolveCuttlefishBuild.
 - Cuttlefish operations run external commands and report state via JobService events.
+- GetCuttlefishStatus now combines `cvd status` with ADB state fallback (including `adb devices -l`
+  fallback when direct `adb -s <serial> get-state` fails) so running/booting instances are
+  reported even when `cvd` is unavailable.
+- GetCuttlefishStatus also probes `/proc` for active `run_cvd`/`launch_cvd` processes tied to the
+  configured system image directory; this prevents false `stopped` reports when `cvd status`
+  returns "no device" but Cuttlefish host processes are still running.
+- GetCuttlefishStatus also reflects in-flight Cuttlefish jobs from JobService (`starting`/`stopping`)
+  when start/stop jobs are running, so clients do not show stale `stopped` while operations are active.
+- GetCuttlefishStatus no longer upgrades `stopped` to `starting` from stale `adb offline` residue
+  after stop; only confirmed `adb_state=device` forces `running`.
+- Running Cuttlefish start/stop jobs older than 10 minutes are ignored when computing
+  start/stop preconditions and status overlays so stale persisted job state (for example after a
+  crash/restart) does not pin status as `starting`/`stopping`.
+- Even when a start/stop job still appears as running in JobService, status now keeps `stopped`
+  for stopped/not-installed runtime snapshots and marks those job refs as stale details instead of
+  forcing `starting`/`stopping`.
+- StartCuttlefish now rejects duplicate starts when Cuttlefish is already detected as running or
+  starting, returning a failed-precondition gRPC error instead of launching another instance.
+- StartCuttlefish also rejects duplicate requests when an existing `targets.cuttlefish.start` job
+  is already in `running` state, preventing concurrent start jobs even when runtime status probes
+  still report stopped.
+- StartCuttlefish rejects requests while a `targets.cuttlefish.stop` job is running; StopCuttlefish
+  rejects duplicate stop requests while a `targets.cuttlefish.stop` job is already running.
+- Start job recovery now handles stale instance-directory lock errors (for example "Instance
+  directory files in use. Try `cvd reset`") by attempting stop/reset cleanup and retrying launch.
+- Start command execution now uses a configurable timeout (default 120s via
+  `AADK_CUTTLEFISH_START_CMD_TIMEOUT_SECS`); if it times out, the job continues with adb readiness
+  checks instead of hanging indefinitely at the start phase.
+- Start launch arguments now auto-disable TAP networking (`--enable_tap_devices=false`) when host
+  TAP creation probes indicate insufficient permissions (for example `Operation not permitted`);
+  explicit `--enable_tap_devices=...` in `AADK_CUTTLEFISH_START_ARGS` takes precedence.
+- Start also auto-applies host-tier CPU/RAM launch limits when explicit values are not provided
+  (for 4-core/~8GB hosts this now maps to `--cpus=2 --memory_mb=3072`); env overrides are available.
+- Start also auto-applies host-tier display sizing (`x_res/y_res/dpi`) when explicit values are
+  not provided (for 4-core/~8GB hosts this now maps to `720x1280@280dpi`) to avoid oversized windows.
+- Start patches empty `usr/share/webrtc/assets/custom.css` files in the Cuttlefish image directory
+  to avoid intermittent Web UI stylesheet dropouts caused by zero-byte CSS responses.
 - Job progress metrics include target/app identifiers, adb serials, install/launch inputs, and
   target health/ABI/SDK details plus Cuttlefish env/artifact details.
 - InstallApk, Launch, StopApp, and Cuttlefish job RPCs accept optional job_id for existing jobs
@@ -71,7 +108,19 @@ Update this file whenever TargetService behavior changes or when commits touchin
 - AADK_CUTTLEFISH_IMAGES_DIR=/path (or _16K/_4K variants)
 - AADK_CUTTLEFISH_HOST_DIR=/path (or _16K/_4K variants)
 - AADK_CUTTLEFISH_START_CMD / AADK_CUTTLEFISH_START_ARGS
+- AADK_CUTTLEFISH_AUTO_RESOURCES=1|0
+- AADK_CUTTLEFISH_CPUS=<n>
+- AADK_CUTTLEFISH_MEMORY_MB=<mb>
+- AADK_CUTTLEFISH_AUTO_DISPLAY=1|0
+- AADK_CUTTLEFISH_X_RES=<px>
+- AADK_CUTTLEFISH_Y_RES=<px>
+- AADK_CUTTLEFISH_DPI=<n>
+- AADK_CUTTLEFISH_TAP_MODE=auto|enabled|disabled
+- AADK_CUTTLEFISH_ENABLE_TAP=1|0 (legacy alias)
 - AADK_CUTTLEFISH_STOP_CMD
+- AADK_CUTTLEFISH_RESET_CMD
+- AADK_CUTTLEFISH_START_CMD_TIMEOUT_SECS (default 120)
+- AADK_CUTTLEFISH_STOP_CMD_TIMEOUT_SECS (default 60)
 - AADK_CUTTLEFISH_INSTALL_CMD (optional override; required on non-Debian hosts)
 - AADK_CUTTLEFISH_INSTALL_HOST=0
 - AADK_CUTTLEFISH_INSTALL_IMAGES=0

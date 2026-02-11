@@ -60,6 +60,20 @@ Default addresses (override with env vars):
 - BuildService resolves project paths via ProjectService GetProject for ids; direct paths are accepted.
 - BuildService loads a Gradle model snapshot after project evaluation to validate modules/variants.
 - TargetService shells out to adb and optionally Cuttlefish tooling (KVM/GPU preflight, headless WebRTC fallback, images-dir fallback logging, env-control URLs).
+- TargetService GetCuttlefishStatus overlays running start/stop jobs and uses `cvd` + adb + process
+  probes (`run_cvd`/`launch_cvd`) so stale host processes are reported as running instead of stopped.
+- TargetService keeps `stopped` when only stale `adb offline` entries remain after stop; only
+  `adb_state=device` upgrades Cuttlefish state to `running`.
+- TargetService also avoids forcing `starting`/`stopping` from stale running start/stop jobs when
+  runtime probes already report a stopped/not-installed state.
+- TargetService Cuttlefish start auto-falls back to `--enable_tap_devices=false` on hosts where TAP
+  device creation is blocked, unless explicit `--enable_tap_devices` args are provided.
+- TargetService Cuttlefish start now auto-applies conservative CPU/RAM limits on smaller hosts
+  unless explicit CPU/memory launch args are provided.
+- TargetService Cuttlefish start now auto-applies smaller display sizing on constrained hosts
+  unless explicit display args are provided.
+- TargetService Cuttlefish start patches empty WebRTC `custom.css` assets in local Cuttlefish
+  image dirs to avoid intermittent browser stylesheet dropouts.
 - ToolchainService downloads SDK/NDK archives, verifies sha256, persists state under ~/.local/share/aadk.
 - ToolchainService normalizes SDK cmdline-tools layout by creating cmdline-tools/latest links when
   archives ship a flat cmdline-tools/bin + lib layout.

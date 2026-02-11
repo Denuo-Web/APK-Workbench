@@ -296,6 +296,12 @@ WebRTC streaming:
 - Launch with `--start_webrtc=true` (TargetService sets this automatically when "show full UI" is selected; override via `AADK_CUTTLEFISH_START_ARGS`).
 - Web UI is available at `https://localhost:8443` by default (`AADK_CUTTLEFISH_WEBRTC_URL` overrides).
 - Remote access requires firewall access for TCP 8443 and TCP/UDP 15550-15599.
+- Standalone smoke test (outside AADK):
+  - `HOME="$HOME/.local/share/aadk/cuttlefish/16k" cvd reset -y`
+  - `HOME="$HOME/.local/share/aadk/cuttlefish/16k" "$HOME/.local/share/aadk/cuttlefish/16k/bin/launch_cvd" --daemon --system_image_dir="$HOME/.local/share/aadk/cuttlefish/16k" --report_anonymous_usage_stats=n --start_webrtc=true --enable_tap_devices=false`
+  - `"$HOME/.local/share/aadk/cuttlefish/16k/bin/adb" connect 0.0.0.0:6520 && "$HOME/.local/share/aadk/cuttlefish/16k/bin/adb" -s 0.0.0.0:6520 get-state` should print `device`.
+  - `curl -k https://localhost:8443/devices` should list `cvd-1`.
+  - Stop with `HOME="$HOME/.local/share/aadk/cuttlefish/16k" "$HOME/.local/share/aadk/cuttlefish/16k/bin/stop_cvd"`.
 
 Environment control (REST/CLI):
 - REST endpoint: `https://localhost:1443` (`AADK_CUTTLEFISH_ENV_URL` overrides).
@@ -311,6 +317,11 @@ Wi-Fi:
 - Android 14+ uses `WmediumdService` (via env control REST/CLI); Android 13 or lower uses `wmediumd_control`.
 - OpenWRT AP: default device id is `cvd-1`; default WAN IP is `192.168.94.2` or `192.168.96.2` when no launch options are provided.
 - OpenWRT access: `ssh root@OPENWRT_WAN_IP_ADDRESS` or `https://localhost:1443/devices/DEVICE_ID/openwrt`.
+- If launcher logs show `failed to open tap device ... Operation not permitted`, host TAP setup is blocked.
+  Use `--enable_tap_devices=false` (or `AADK_CUTTLEFISH_START_ARGS=--enable_tap_devices=false`) to boot without TAP-backed networking.
+  This keeps WebRTC + adb working but disables bridged Wi-Fi/OpenWRT networking features.
+  AADK auto-detects this condition and applies `--enable_tap_devices=false` unless an explicit
+  `--enable_tap_devices=...` flag is already present in `AADK_CUTTLEFISH_START_ARGS`.
 
 Bluetooth:
 - Rootcanal is controlled from the Web UI command console.
@@ -336,6 +347,15 @@ Configuration (env vars):
 - `AADK_CUTTLEFISH_HOST_DIR=/path` (or `_16K`/`_4K`) to override the host tools directory
 - `AADK_CUTTLEFISH_START_CMD="..."` to override the start command
 - `AADK_CUTTLEFISH_START_ARGS="..."` to append args to `cvd start`/`launch_cvd`
+- `AADK_CUTTLEFISH_AUTO_RESOURCES=1|0` to enable/disable host-based auto CPU/RAM limits (default `1`)
+- `AADK_CUTTLEFISH_CPUS=<n>` to force `--cpus=<n>` when start args do not already define CPU count
+- `AADK_CUTTLEFISH_MEMORY_MB=<mb>` to force `--memory_mb=<mb>` when start args do not already define memory
+- `AADK_CUTTLEFISH_AUTO_DISPLAY=1|0` to enable/disable host-based display sizing (default `1`)
+- `AADK_CUTTLEFISH_X_RES=<px>` to force `--x_res=<px>` when start args do not already define display width
+- `AADK_CUTTLEFISH_Y_RES=<px>` to force `--y_res=<px>` when start args do not already define display height
+- `AADK_CUTTLEFISH_DPI=<n>` to force `--dpi=<n>` when start args do not already define display density
+- `AADK_CUTTLEFISH_TAP_MODE=auto|enabled|disabled` to control TAP probing behavior (`auto` default)
+- `AADK_CUTTLEFISH_ENABLE_TAP=1|0` legacy alias for enabling/disabling TAP mode
 - `AADK_CUTTLEFISH_STOP_CMD="..."` to override the stop command
 - `AADK_CUTTLEFISH_INSTALL_CMD="..."` to override the host install command (required on non-Debian hosts)
 - `AADK_CUTTLEFISH_INSTALL_HOST=0` to skip host package installation
@@ -361,3 +381,8 @@ Notes:
 - The UI and CLI pass `include_offline=true`, so a stopped Cuttlefish instance still appears.
 - Start/stop/status actions are exposed in the UI and CLI (Targets -> Start/Stop/Status Cuttlefish).
 - Install Cuttlefish uses public artifacts from `ci.android.com`.
+- On smaller hosts, TargetService now auto-applies conservative launch limits and display sizing
+  (for 4-core / ~8GB hosts: `--cpus=2 --memory_mb=3072 --x_res=720 --y_res=1280 --dpi=280`)
+  unless you already set those args in `AADK_CUTTLEFISH_START_ARGS`.
+- TargetService also patches empty `usr/share/webrtc/assets/custom.css` files in local Cuttlefish
+  installs to avoid intermittent Web UI stylesheet dropouts on refresh.
