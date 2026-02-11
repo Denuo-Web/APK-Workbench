@@ -3,6 +3,8 @@ use std::{
     fs, io,
     path::{Path, PathBuf},
     process::Stdio,
+    time::Duration,
+    time::SystemTime,
 };
 
 use aadk_proto::aadk::v1::{
@@ -106,6 +108,270 @@ fn cuttlefish_stop_bin() -> String {
 
 fn cuttlefish_gpu_mode() -> Option<String> {
     read_env_trimmed("AADK_CUTTLEFISH_GPU_MODE")
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CuttlefishTapMode {
+    Auto,
+    Enabled,
+    Disabled,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct CuttlefishResourceLimits {
+    cpus: Option<u32>,
+    memory_mb: Option<u32>,
+    x_res: Option<u32>,
+    y_res: Option<u32>,
+    dpi: Option<u32>,
+}
+
+fn parse_env_bool(raw: &str) -> Option<bool> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+fn cuttlefish_tap_mode() -> CuttlefishTapMode {
+    if let Some(mode) = read_env_trimmed("AADK_CUTTLEFISH_TAP_MODE") {
+        match mode.to_ascii_lowercase().as_str() {
+            "enabled" | "on" | "true" | "1" => return CuttlefishTapMode::Enabled,
+            "disabled" | "off" | "false" | "0" => return CuttlefishTapMode::Disabled,
+            _ => {}
+        }
+    }
+    if let Some(value) = read_env_trimmed("AADK_CUTTLEFISH_ENABLE_TAP") {
+        if let Some(enabled) = parse_env_bool(&value) {
+            return if enabled {
+                CuttlefishTapMode::Enabled
+            } else {
+                CuttlefishTapMode::Disabled
+            };
+        }
+    }
+    CuttlefishTapMode::Auto
+}
+
+fn parse_env_u32(key: &str) -> Option<u32> {
+    read_env_trimmed(key)?
+        .parse::<u32>()
+        .ok()
+        .filter(|value| *value > 0)
+}
+
+fn cuttlefish_auto_resources_enabled() -> bool {
+    match read_env_trimmed("AADK_CUTTLEFISH_AUTO_RESOURCES") {
+        Some(value) => parse_env_bool(&value).unwrap_or(true),
+        None => true,
+    }
+}
+
+fn cuttlefish_auto_display_enabled() -> bool {
+    match read_env_trimmed("AADK_CUTTLEFISH_AUTO_DISPLAY") {
+        Some(value) => parse_env_bool(&value).unwrap_or(true),
+        None => true,
+    }
+}
+
+fn host_total_memory_mb() -> Option<u64> {
+    let raw = fs::read_to_string("/proc/meminfo").ok()?;
+    for line in raw.lines() {
+        let line = line.trim();
+        if !line.starts_with("MemTotal:") {
+            continue;
+        }
+        let kb = line
+            .split_whitespace()
+            .nth(1)
+            .and_then(|value| value.parse::<u64>().ok())?;
+        return Some(kb / 1024);
+    }
+    None
+}
+
+fn host_cpu_count() -> usize {
+    std::thread::available_parallelism()
+        .map(|value| value.get())
+        .unwrap_or(1)
+}
+
+fn recommended_cuttlefish_cpus(host_cpus: usize) -> Option<u32> {
+    if host_cpus <= 2 {
+        Some(1)
+    } else if host_cpus <= 6 {
+        Some(2)
+    } else {
+        None
+    }
+}
+
+fn recommended_cuttlefish_memory_mb(host_memory_mb: u64) -> Option<u32> {
+    if host_memory_mb <= 6 * 1024 {
+        Some(2048)
+    } else if host_memory_mb <= 12 * 1024 {
+        Some(3072)
+    } else {
+        None
+    }
+}
+
+fn recommended_cuttlefish_display(
+    host_cpus: usize,
+    host_memory_mb: u64,
+) -> Option<(u32, u32, u32)> {
+    if host_cpus <= 2 || host_memory_mb <= 6 * 1024 {
+        Some((540, 960, 240))
+    } else if host_cpus <= 4 || host_memory_mb <= 8 * 1024 {
+        Some((720, 1280, 280))
+    } else {
+        None
+    }
+}
+
+fn resolve_cuttlefish_resource_limits(
+    start_args: &str,
+) -> (CuttlefishResourceLimits, Option<String>) {
+    let has_cpu_arg = args_has_flag(start_args, "--cpus");
+    let has_mem_arg =
+        args_has_flag(start_args, "--memory_mb") || args_has_flag(start_args, "--mem");
+    let has_x_res_arg = args_has_flag(start_args, "--x_res");
+    let has_y_res_arg = args_has_flag(start_args, "--y_res");
+    let has_dpi_arg = args_has_flag(start_args, "--dpi");
+    let mut limits = CuttlefishResourceLimits::default();
+    let mut notes = Vec::new();
+
+    if !has_cpu_arg {
+        if let Some(cpus) = parse_env_u32("AADK_CUTTLEFISH_CPUS") {
+            limits.cpus = Some(cpus);
+            notes.push(format!("--cpus={cpus} (env)"));
+        }
+    }
+    if !has_mem_arg {
+        if let Some(memory_mb) = parse_env_u32("AADK_CUTTLEFISH_MEMORY_MB") {
+            limits.memory_mb = Some(memory_mb);
+            notes.push(format!("--memory_mb={memory_mb} (env)"));
+        }
+    }
+    if !has_x_res_arg {
+        if let Some(x_res) = parse_env_u32("AADK_CUTTLEFISH_X_RES") {
+            limits.x_res = Some(x_res);
+            notes.push(format!("--x_res={x_res} (env)"));
+        }
+    }
+    if !has_y_res_arg {
+        if let Some(y_res) = parse_env_u32("AADK_CUTTLEFISH_Y_RES") {
+            limits.y_res = Some(y_res);
+            notes.push(format!("--y_res={y_res} (env)"));
+        }
+    }
+    if !has_dpi_arg {
+        if let Some(dpi) = parse_env_u32("AADK_CUTTLEFISH_DPI") {
+            limits.dpi = Some(dpi);
+            notes.push(format!("--dpi={dpi} (env)"));
+        }
+    }
+
+    let host_cpus = host_cpu_count();
+    let host_memory_mb = host_total_memory_mb();
+    if cuttlefish_auto_resources_enabled() {
+        if limits.cpus.is_none() && !has_cpu_arg {
+            if let Some(cpus) = recommended_cuttlefish_cpus(host_cpus) {
+                limits.cpus = Some(cpus);
+                notes.push(format!("--cpus={cpus} (auto)"));
+            }
+        }
+        if limits.memory_mb.is_none() && !has_mem_arg {
+            if let Some(memory_mb) = host_memory_mb.and_then(recommended_cuttlefish_memory_mb) {
+                limits.memory_mb = Some(memory_mb);
+                notes.push(format!("--memory_mb={memory_mb} (auto)"));
+            }
+        }
+    }
+    if cuttlefish_auto_display_enabled() {
+        if let Some((x_res, y_res, dpi)) =
+            host_memory_mb.and_then(|memory| recommended_cuttlefish_display(host_cpus, memory))
+        {
+            if limits.x_res.is_none() && !has_x_res_arg {
+                limits.x_res = Some(x_res);
+                notes.push(format!("--x_res={x_res} (auto)"));
+            }
+            if limits.y_res.is_none() && !has_y_res_arg {
+                limits.y_res = Some(y_res);
+                notes.push(format!("--y_res={y_res} (auto)"));
+            }
+            if limits.dpi.is_none() && !has_dpi_arg {
+                limits.dpi = Some(dpi);
+                notes.push(format!("--dpi={dpi} (auto)"));
+            }
+        }
+    }
+
+    let note = if notes.is_empty() {
+        None
+    } else {
+        let host_mem_note = host_memory_mb
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "unknown".into());
+        Some(format!(
+            "Applying Cuttlefish resource limits: {} (host_cpus={host_cpus}, host_memory_mb={host_mem_note})",
+            notes.join(", ")
+        ))
+    };
+    (limits, note)
+}
+
+fn tap_probe_name() -> String {
+    // Linux interface names are limited to 15 bytes; keep this short and alphanumeric.
+    let pid = std::process::id() as u64;
+    let suffix = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|d| d.as_micros() as u64)
+        .unwrap_or(0);
+    format!("acf{:04x}{:04x}", pid & 0xffff, suffix & 0xffff)
+}
+
+fn tap_permission_error(output: &str) -> bool {
+    let lower = output.to_ascii_lowercase();
+    lower.contains("operation not permitted")
+        || lower.contains("permission denied")
+        || lower.contains("tunsetiff")
+        || lower.contains("no such file or directory")
+        || lower.contains("device not found")
+        || lower.contains("cannot find device")
+}
+
+async fn host_supports_tap_devices() -> bool {
+    if !Path::new("/dev/net/tun").exists() {
+        return false;
+    }
+    let Some(ip_path) = find_command("ip") else {
+        return false;
+    };
+    let probe = tap_probe_name();
+    let ip = shell_escape(&ip_path.display().to_string());
+    let command =
+        format!("{ip} tuntap add dev {probe} mode tap && {ip} tuntap del dev {probe} mode tap");
+    let (success, _, stdout, stderr) = match run_shell_command_raw(&command).await {
+        Ok(output) => output,
+        Err(err) => {
+            warn!("failed to probe TAP networking support: {}", err);
+            return false;
+        }
+    };
+    if success {
+        true
+    } else {
+        let combined = format!("{stdout}\n{stderr}");
+        if !tap_permission_error(&combined) {
+            warn!(
+                "TAP probe failed with unexpected output; assuming unavailable: {}",
+                combined.trim()
+            );
+        }
+        false
+    }
 }
 
 fn find_command(cmd: &str) -> Option<PathBuf> {
@@ -838,9 +1104,104 @@ fn cuttlefish_home_env_prefix(home: &Path) -> String {
     format!("HOME={} ", shell_escape(home_str.as_ref()))
 }
 
+fn webrtc_custom_css_path(images_dir: &Path) -> PathBuf {
+    images_dir
+        .join("usr")
+        .join("share")
+        .join("webrtc")
+        .join("assets")
+        .join("custom.css")
+}
+
+fn ensure_nonempty_webrtc_custom_css(images_dir: &Path) -> io::Result<bool> {
+    let path = webrtc_custom_css_path(images_dir);
+    let metadata = match fs::metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(err) => return Err(err),
+    };
+    if !metadata.is_file() || metadata.len() > 0 {
+        return Ok(false);
+    }
+    fs::write(
+        &path,
+        "/* AADK: avoid empty custom.css TLS EOF responses */\n",
+    )?;
+    Ok(true)
+}
+
+fn proc_state(pid: u32) -> Option<char> {
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    stat.split_whitespace().nth(2)?.chars().next()
+}
+
+fn proc_cmdline(pid: u32) -> Option<String> {
+    let raw = fs::read(format!("/proc/{pid}/cmdline")).ok()?;
+    if raw.is_empty() {
+        return None;
+    }
+    let parts: Vec<String> = raw
+        .split(|b| *b == 0)
+        .filter(|part| !part.is_empty())
+        .map(|part| String::from_utf8_lossy(part).to_string())
+        .collect();
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(" "))
+    }
+}
+
+fn cuttlefish_runtime_processes(system_image_dir: &Path) -> Vec<u32> {
+    let mut pids = Vec::new();
+    let image_dir = system_image_dir.display().to_string();
+    let entries = match fs::read_dir("/proc") {
+        Ok(entries) => entries,
+        Err(_) => return pids,
+    };
+    for entry in entries.flatten() {
+        let Some(pid_str) = entry.file_name().to_str().map(|value| value.to_string()) else {
+            continue;
+        };
+        let Ok(pid) = pid_str.parse::<u32>() else {
+            continue;
+        };
+        if matches!(proc_state(pid), Some('Z')) {
+            continue;
+        }
+        let Some(cmdline) = proc_cmdline(pid) else {
+            continue;
+        };
+        if !(cmdline.contains("run_cvd") || cmdline.contains("launch_cvd")) {
+            continue;
+        }
+        if !cmdline.contains(&image_dir) {
+            continue;
+        }
+        pids.push(pid);
+    }
+    pids.sort_unstable();
+    pids
+}
+
+fn format_pid_list(pids: &[u32], max_items: usize) -> String {
+    let shown = pids
+        .iter()
+        .take(max_items)
+        .map(|pid| pid.to_string())
+        .collect::<Vec<_>>();
+    if pids.len() > max_items {
+        format!("{},+{}", shown.join(","), pids.len() - max_items)
+    } else {
+        shown.join(",")
+    }
+}
+
 pub(crate) async fn cuttlefish_status() -> Result<CuttlefishStatus, CuttlefishStatusError> {
     let page_size = host_page_size();
     let home_dir = cuttlefish_home_dir(page_size);
+    let (images_dir, _) = resolve_cuttlefish_images_dir(page_size);
+    let runtime_pids = cuttlefish_runtime_processes(&images_dir);
     let cvd_path = cuttlefish_cvd_path();
     let launch_path = cuttlefish_launch_path(page_size);
     if cvd_path.is_none() && launch_path.is_none() {
@@ -851,6 +1212,16 @@ pub(crate) async fn cuttlefish_status() -> Result<CuttlefishStatus, CuttlefishSt
         adb_serial: cuttlefish_adb_serial(),
         ..Default::default()
     };
+    if !runtime_pids.is_empty() {
+        status.running = true;
+        status.details.push((
+            "process_probe".into(),
+            "run_cvd/launch_cvd process detected".into(),
+        ));
+        status
+            .details
+            .push(("process_pids".into(), format_pid_list(&runtime_pids, 8)));
+    }
 
     let Some(cvd_path) = cvd_path else {
         return Ok(status);
@@ -1258,7 +1629,14 @@ fn classify_install_error(detail: &str) -> ErrorCode {
 }
 
 async fn run_shell_command(command: &str) -> Result<(bool, i32, String), io::Error> {
-    let (success, code, stdout, stderr) = run_shell_command_inner(command, None).await?;
+    run_shell_command_with_timeout(command, None).await
+}
+
+async fn run_shell_command_with_timeout(
+    command: &str,
+    timeout: Option<Duration>,
+) -> Result<(bool, i32, String), io::Error> {
+    let (success, code, stdout, stderr) = run_shell_command_inner(command, None, timeout).await?;
     let log = format_adb_output(&stdout, &stderr);
     Ok((success, code, log))
 }
@@ -1267,18 +1645,28 @@ async fn run_shell_command_in_dir(
     command: &str,
     dir: &Path,
 ) -> Result<(bool, i32, String), io::Error> {
-    let (success, code, stdout, stderr) = run_shell_command_inner(command, Some(dir)).await?;
+    run_shell_command_in_dir_with_timeout(command, dir, None).await
+}
+
+async fn run_shell_command_in_dir_with_timeout(
+    command: &str,
+    dir: &Path,
+    timeout: Option<Duration>,
+) -> Result<(bool, i32, String), io::Error> {
+    let (success, code, stdout, stderr) =
+        run_shell_command_inner(command, Some(dir), timeout).await?;
     let log = format_adb_output(&stdout, &stderr);
     Ok((success, code, log))
 }
 
 async fn run_shell_command_raw(command: &str) -> Result<(bool, i32, String, String), io::Error> {
-    run_shell_command_inner(command, None).await
+    run_shell_command_inner(command, None, None).await
 }
 
 async fn run_shell_command_inner(
     command: &str,
     dir: Option<&Path>,
+    timeout: Option<Duration>,
 ) -> Result<(bool, i32, String, String), io::Error> {
     let mut cmd = Command::new("sh");
     cmd.arg("-lc")
@@ -1287,10 +1675,26 @@ async fn run_shell_command_inner(
         .env("APT_LISTCHANGES_FRONTEND", "none")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if timeout.is_some() {
+        cmd.kill_on_drop(true);
+    }
     if let Some(dir) = dir {
         cmd.current_dir(dir);
     }
-    let output = cmd.output().await?;
+    let output = match timeout {
+        Some(timeout) => match tokio::time::timeout(timeout, cmd.output()).await {
+            Ok(output) => output?,
+            Err(_) => {
+                return Ok((
+                    false,
+                    124,
+                    String::new(),
+                    format!("command timed out after {}s", timeout.as_secs()),
+                ));
+            }
+        },
+        None => cmd.output().await?,
+    };
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -1416,6 +1820,7 @@ struct CuttlefishCommandOutcome {
     success: bool,
     exit_code: i32,
     log: String,
+    timed_out: bool,
 }
 
 async fn run_cuttlefish_command(
@@ -1425,17 +1830,21 @@ async fn run_cuttlefish_command(
     phase: &str,
     percent: u32,
     cwd: Option<&Path>,
+    timeout: Option<Duration>,
 ) -> Result<CuttlefishCommandOutcome, ErrorDetail> {
     let mut metrics = vec![metric("command", command)];
     if let Some(dir) = cwd {
         metrics.push(metric("cwd", dir.display()));
     }
+    if let Some(timeout) = timeout {
+        metrics.push(metric("timeout_secs", timeout.as_secs()));
+    }
     let _ = publish_progress(job_client, job_id, percent, phase, metrics).await;
     let _ = publish_log(job_client, job_id, &format!("Running: {command}\n")).await;
 
     let result = match cwd {
-        Some(dir) => run_shell_command_in_dir(command, dir).await,
-        None => run_shell_command(command).await,
+        Some(dir) => run_shell_command_in_dir_with_timeout(command, dir, timeout).await,
+        None => run_shell_command_with_timeout(command, timeout).await,
     };
     match result {
         Ok((success, exit_code, log)) => {
@@ -1446,6 +1855,7 @@ async fn run_cuttlefish_command(
                 success,
                 exit_code,
                 log,
+                timed_out: exit_code == 124,
             })
         }
         Err(err) => {
@@ -1503,6 +1913,30 @@ fn should_recover_bluetooth(log: &str) -> bool {
         && (lower.contains("boot_failed")
             || lower.contains("boot pending")
             || lower.contains("dependencies not ready"))
+}
+
+fn should_recover_stale_instance(log: &str) -> bool {
+    let lower = log.to_lowercase();
+    lower.contains("instance directory files in use")
+        || lower.contains("try `cvd reset`")
+        || lower.contains("failed to clean prior files")
+        || lower.contains("cleanpriorfiles")
+}
+
+fn env_timeout_secs(name: &str, default_secs: u64) -> Duration {
+    read_env_trimmed(name)
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|secs| *secs > 0)
+        .map(Duration::from_secs)
+        .unwrap_or_else(|| Duration::from_secs(default_secs))
+}
+
+fn cuttlefish_start_timeout() -> Duration {
+    env_timeout_secs("AADK_CUTTLEFISH_START_CMD_TIMEOUT_SECS", 120)
+}
+
+fn cuttlefish_stop_timeout() -> Duration {
+    env_timeout_secs("AADK_CUTTLEFISH_STOP_CMD_TIMEOUT_SECS", 60)
 }
 
 fn args_has_flag(args: &str, flag: &str) -> bool {
@@ -1668,6 +2102,8 @@ async fn cuttlefish_preflight(
 fn cuttlefish_start_command(
     runtime: &CuttlefishRuntime,
     show_full_ui: bool,
+    disable_tap_devices: bool,
+    resource_limits: CuttlefishResourceLimits,
     job_id: &str,
 ) -> Result<String, ErrorDetail> {
     if let Some(cmd) = read_env_trimmed("AADK_CUTTLEFISH_START_CMD") {
@@ -1699,6 +2135,57 @@ fn cuttlefish_start_command(
             extra_args.push(' ');
         }
         extra_args.push_str("--enable_host_bluetooth=true");
+    }
+    if disable_tap_devices && !args_has_flag(&extra_args, "--enable_tap_devices") {
+        if !extra_args.is_empty() {
+            extra_args.push(' ');
+        }
+        extra_args.push_str("--enable_tap_devices=false");
+    }
+    if let Some(cpus) = resource_limits.cpus {
+        if !args_has_flag(&extra_args, "--cpus") {
+            if !extra_args.is_empty() {
+                extra_args.push(' ');
+            }
+            extra_args.push_str("--cpus=");
+            extra_args.push_str(&cpus.to_string());
+        }
+    }
+    if let Some(memory_mb) = resource_limits.memory_mb {
+        if !args_has_flag(&extra_args, "--memory_mb") && !args_has_flag(&extra_args, "--mem") {
+            if !extra_args.is_empty() {
+                extra_args.push(' ');
+            }
+            extra_args.push_str("--memory_mb=");
+            extra_args.push_str(&memory_mb.to_string());
+        }
+    }
+    if let Some(x_res) = resource_limits.x_res {
+        if !args_has_flag(&extra_args, "--x_res") {
+            if !extra_args.is_empty() {
+                extra_args.push(' ');
+            }
+            extra_args.push_str("--x_res=");
+            extra_args.push_str(&x_res.to_string());
+        }
+    }
+    if let Some(y_res) = resource_limits.y_res {
+        if !args_has_flag(&extra_args, "--y_res") {
+            if !extra_args.is_empty() {
+                extra_args.push(' ');
+            }
+            extra_args.push_str("--y_res=");
+            extra_args.push_str(&y_res.to_string());
+        }
+    }
+    if let Some(dpi) = resource_limits.dpi {
+        if !args_has_flag(&extra_args, "--dpi") {
+            if !extra_args.is_empty() {
+                extra_args.push(' ');
+            }
+            extra_args.push_str("--dpi=");
+            extra_args.push_str(&dpi.to_string());
+        }
     }
     if let Some(launch_path) = cuttlefish_launch_path(runtime.page_size) {
         let mut command = format!(
@@ -1774,6 +2261,30 @@ fn cuttlefish_stop_command(
         ErrorCode::NotFound,
         "no cuttlefish stop command available",
         "set AADK_CUTTLEFISH_STOP_CMD or install Cuttlefish host tools".into(),
+        job_id,
+    ))
+}
+
+fn cuttlefish_reset_command(
+    runtime: &CuttlefishRuntime,
+    job_id: &str,
+) -> Result<String, ErrorDetail> {
+    if let Some(cmd) = read_env_trimmed("AADK_CUTTLEFISH_RESET_CMD") {
+        return Ok(cmd);
+    }
+
+    if let Some(cvd_path) = cuttlefish_cvd_path() {
+        return Ok(format!(
+            "{}{} reset -y",
+            cuttlefish_home_env_prefix(&runtime.home_dir),
+            shell_escape(&cvd_path.display().to_string())
+        ));
+    }
+
+    Err(job_error_detail(
+        ErrorCode::NotFound,
+        "no cuttlefish reset command available",
+        "set AADK_CUTTLEFISH_RESET_CMD or install cvd".into(),
         job_id,
     ))
 }
@@ -1873,8 +2384,28 @@ pub(crate) async fn run_cuttlefish_start_job(job_id: String, show_full_ui: bool)
         }
     };
 
+    match ensure_nonempty_webrtc_custom_css(&runtime.images_dir) {
+        Ok(true) => {
+            let _ = publish_log(
+                &mut job_client,
+                &job_id,
+                "Patched empty Cuttlefish custom.css to avoid Web UI stylesheet dropouts\n",
+            )
+            .await;
+        }
+        Ok(false) => {}
+        Err(err) => {
+            let _ = publish_log(
+                &mut job_client,
+                &job_id,
+                &format!("Unable to patch Cuttlefish custom.css: {err}\n"),
+            )
+            .await;
+        }
+    }
+
+    let start_args = read_env_trimmed("AADK_CUTTLEFISH_START_ARGS").unwrap_or_default();
     if !show_full_ui {
-        let start_args = read_env_trimmed("AADK_CUTTLEFISH_START_ARGS").unwrap_or_default();
         if !args_has_flag(&start_args, "--start_webrtc") && !local_display_available() {
             let _ = publish_log(
                 &mut job_client,
@@ -1891,9 +2422,38 @@ pub(crate) async fn run_cuttlefish_start_job(job_id: String, show_full_ui: bool)
     }
 
     let mut start_cmd = String::new();
+    let start_timeout = cuttlefish_start_timeout();
+    let stop_timeout = cuttlefish_stop_timeout();
+    let (resource_limits, resource_note) = resolve_cuttlefish_resource_limits(&start_args);
+    if let Some(note) = resource_note {
+        let _ = publish_log(&mut job_client, &job_id, &format!("{note}\n")).await;
+    }
+    let disable_tap_devices = if args_has_flag(&start_args, "--enable_tap_devices") {
+        false
+    } else {
+        match cuttlefish_tap_mode() {
+            CuttlefishTapMode::Enabled => false,
+            CuttlefishTapMode::Disabled => true,
+            CuttlefishTapMode::Auto => !host_supports_tap_devices().await,
+        }
+    };
+    if disable_tap_devices {
+        let _ = publish_log(
+            &mut job_client,
+            &job_id,
+            "Host TAP networking is unavailable; launching Cuttlefish with --enable_tap_devices=false\n",
+        )
+        .await;
+    }
     if need_start {
         cleanup_cuttlefish_temp();
-        let command = match cuttlefish_start_command(&runtime, show_full_ui, &job_id) {
+        let command = match cuttlefish_start_command(
+            &runtime,
+            show_full_ui,
+            disable_tap_devices,
+            resource_limits,
+            &job_id,
+        ) {
             Ok(command) => command,
             Err(detail) => {
                 let _ = publish_failed(&mut job_client, &job_id, detail).await;
@@ -1912,6 +2472,7 @@ pub(crate) async fn run_cuttlefish_start_job(job_id: String, show_full_ui: bool)
             "starting",
             40,
             Some(&runtime.host_dir),
+            Some(start_timeout),
         )
         .await
         {
@@ -1923,87 +2484,156 @@ pub(crate) async fn run_cuttlefish_start_job(job_id: String, show_full_ui: bool)
         };
 
         if !outcome.success {
-            let mut recovered = false;
-            if should_recover_bluetooth(&outcome.log) && command.contains("launch_cvd") {
+            if outcome.timed_out {
                 let _ = publish_log(
                     &mut job_client,
                     &job_id,
-                    "Cuttlefish boot blocked by Bluetooth; attempting recovery\n",
+                    &format!(
+                        "Start command exceeded {}s timeout; continuing with device readiness checks\n",
+                        start_timeout.as_secs()
+                    ),
                 )
                 .await;
-                let recovery_cmd = append_arg_once(command.clone(), "--fail_fast=false");
-                let _ = run_cuttlefish_command(
-                    &mut job_client,
-                    &job_id,
-                    &recovery_cmd,
-                    "recovering",
-                    45,
-                    Some(&runtime.host_dir),
-                )
-                .await;
-
-                if let Some(serial) =
-                    wait_for_adb_device(60, std::time::Duration::from_secs(2)).await
-                {
+            } else {
+                let mut recovered = false;
+                if should_recover_stale_instance(&outcome.log) {
                     let _ = publish_log(
                         &mut job_client,
                         &job_id,
-                        &format!("Enabling Bluetooth in guest via {serial}\n"),
+                        "Cuttlefish instance files are busy; attempting reset recovery\n",
                     )
                     .await;
-                    enable_guest_bluetooth(&serial).await;
-                } else {
+
+                    if let Ok(stop_cmd) = cuttlefish_stop_command(&runtime, &job_id) {
+                        let _ = run_cuttlefish_command(
+                            &mut job_client,
+                            &job_id,
+                            &stop_cmd,
+                            "cleanup",
+                            45,
+                            Some(&runtime.host_dir),
+                            Some(stop_timeout),
+                        )
+                        .await;
+                    }
+
+                    if let Ok(reset_cmd) = cuttlefish_reset_command(&runtime, &job_id) {
+                        let _ = run_cuttlefish_command(
+                            &mut job_client,
+                            &job_id,
+                            &reset_cmd,
+                            "resetting",
+                            50,
+                            Some(&runtime.host_dir),
+                            Some(stop_timeout),
+                        )
+                        .await;
+                    } else {
+                        let _ = publish_log(
+                            &mut job_client,
+                            &job_id,
+                            "No reset command available; retrying start after cleanup\n",
+                        )
+                        .await;
+                    }
+
+                    cleanup_cuttlefish_temp();
+                    let retry_outcome = run_cuttlefish_command(
+                        &mut job_client,
+                        &job_id,
+                        &command,
+                        "restarting",
+                        60,
+                        Some(&runtime.host_dir),
+                        Some(start_timeout),
+                    )
+                    .await;
+                    recovered = matches!(retry_outcome, Ok(outcome) if outcome.success);
+                } else if should_recover_bluetooth(&outcome.log) && command.contains("launch_cvd") {
                     let _ = publish_log(
                         &mut job_client,
                         &job_id,
-                        "Bluetooth recovery could not find an ADB device\n",
+                        "Cuttlefish boot blocked by Bluetooth; attempting recovery\n",
                     )
                     .await;
-                }
-
-                if let Ok(stop_cmd) = cuttlefish_stop_command(&runtime, &job_id) {
+                    let recovery_cmd = append_arg_once(command.clone(), "--fail_fast=false");
                     let _ = run_cuttlefish_command(
                         &mut job_client,
                         &job_id,
-                        &stop_cmd,
-                        "stopping",
-                        55,
+                        &recovery_cmd,
+                        "recovering",
+                        45,
                         Some(&runtime.host_dir),
+                        Some(start_timeout),
                     )
                     .await;
+
+                    if let Some(serial) =
+                        wait_for_adb_device(60, std::time::Duration::from_secs(2)).await
+                    {
+                        let _ = publish_log(
+                            &mut job_client,
+                            &job_id,
+                            &format!("Enabling Bluetooth in guest via {serial}\n"),
+                        )
+                        .await;
+                        enable_guest_bluetooth(&serial).await;
+                    } else {
+                        let _ = publish_log(
+                            &mut job_client,
+                            &job_id,
+                            "Bluetooth recovery could not find an ADB device\n",
+                        )
+                        .await;
+                    }
+
+                    if let Ok(stop_cmd) = cuttlefish_stop_command(&runtime, &job_id) {
+                        let _ = run_cuttlefish_command(
+                            &mut job_client,
+                            &job_id,
+                            &stop_cmd,
+                            "stopping",
+                            55,
+                            Some(&runtime.host_dir),
+                            Some(stop_timeout),
+                        )
+                        .await;
+                    }
+
+                    cleanup_cuttlefish_temp();
+                    let retry_outcome = run_cuttlefish_command(
+                        &mut job_client,
+                        &job_id,
+                        &command,
+                        "restarting",
+                        60,
+                        Some(&runtime.host_dir),
+                        Some(start_timeout),
+                    )
+                    .await;
+                    recovered = matches!(retry_outcome, Ok(outcome) if outcome.success);
                 }
 
-                cleanup_cuttlefish_temp();
-                let retry_outcome = run_cuttlefish_command(
-                    &mut job_client,
-                    &job_id,
-                    &command,
-                    "restarting",
-                    60,
-                    Some(&runtime.host_dir),
-                )
-                .await;
-                recovered = matches!(retry_outcome, Ok(outcome) if outcome.success);
-            }
-
-            if recovered {
-                let _ =
-                    publish_log(&mut job_client, &job_id, "Bluetooth recovery succeeded\n").await;
-            } else {
-                let mut detail = if outcome.log.is_empty() {
-                    format!("exit_code={}", outcome.exit_code)
+                if recovered {
+                    let _ =
+                        publish_log(&mut job_client, &job_id, "Cuttlefish recovery succeeded\n")
+                            .await;
                 } else {
-                    format!("exit_code={}\n{}", outcome.exit_code, outcome.log)
-                };
-                append_cuttlefish_diagnostics(&mut detail).await;
-                let error = job_error_detail(
-                    ErrorCode::Internal,
-                    "cuttlefish start failed",
-                    detail,
-                    &job_id,
-                );
-                let _ = publish_failed(&mut job_client, &job_id, error).await;
-                return;
+                    let mut detail = if outcome.log.is_empty() {
+                        format!("exit_code={}", outcome.exit_code)
+                    } else {
+                        format!("exit_code={}\n{}", outcome.exit_code, outcome.log)
+                    };
+                    append_cuttlefish_diagnostics(&mut detail).await;
+                    let error = job_error_detail(
+                        ErrorCode::Internal,
+                        "cuttlefish start failed",
+                        detail,
+                        &job_id,
+                    );
+                    let _ = publish_failed(&mut job_client, &job_id, error).await;
+                    return;
+                }
             }
         }
     }
@@ -2198,6 +2828,7 @@ pub(crate) async fn run_cuttlefish_stop_job(job_id: String) {
         "stopping",
         40,
         Some(&runtime.host_dir),
+        Some(cuttlefish_stop_timeout()),
     )
     .await
     {
@@ -2223,6 +2854,18 @@ pub(crate) async fn run_cuttlefish_stop_job(job_id: String) {
         );
         let _ = publish_failed(&mut job_client, &job_id, error).await;
         return;
+    }
+
+    let stop_log_lower = outcome.log.to_ascii_lowercase();
+    if stop_log_lower.contains("unable to connect to launcher monitor")
+        || stop_log_lower.contains("clean stop failed")
+    {
+        let _ = publish_log(
+            &mut job_client,
+            &job_id,
+            "stop_cvd reported launcher monitor unavailable; treating stop as complete (launcher already exited)\n",
+        )
+        .await;
     }
 
     let outputs = vec![
@@ -2976,4 +3619,79 @@ pub(crate) async fn run_cuttlefish_install_job(job_id: String, options: Cuttlefi
     }
 
     let _ = publish_completed(&mut job_client, &job_id, "Cuttlefish installed", outputs).await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tap_probe_name_fits_linux_ifname_limit() {
+        let name = tap_probe_name();
+        assert!(!name.is_empty());
+        assert!(name.len() <= 15, "ifname too long: {name}");
+        assert!(
+            name.chars().all(|ch| ch.is_ascii_alphanumeric()),
+            "ifname should be alphanumeric: {name}"
+        );
+    }
+
+    #[test]
+    fn tap_permission_error_matches_known_messages() {
+        assert!(tap_permission_error(
+            "ioctl(TUNSETIFF): Operation not permitted"
+        ));
+        assert!(tap_permission_error(
+            "open: /dev/net/tun: No such file or directory"
+        ));
+        assert!(!tap_permission_error("invalid argument"));
+    }
+
+    #[test]
+    fn recommended_resource_limits_match_host_tiers() {
+        assert_eq!(recommended_cuttlefish_cpus(2), Some(1));
+        assert_eq!(recommended_cuttlefish_cpus(4), Some(2));
+        assert_eq!(recommended_cuttlefish_cpus(6), Some(2));
+        assert_eq!(recommended_cuttlefish_cpus(8), None);
+        assert_eq!(recommended_cuttlefish_memory_mb(6 * 1024), Some(2048));
+        assert_eq!(recommended_cuttlefish_memory_mb(8 * 1024), Some(3072));
+        assert_eq!(recommended_cuttlefish_memory_mb(10 * 1024), Some(3072));
+        assert_eq!(recommended_cuttlefish_memory_mb(16 * 1024), None);
+        assert_eq!(
+            recommended_cuttlefish_display(2, 6 * 1024),
+            Some((540, 960, 240))
+        );
+        assert_eq!(
+            recommended_cuttlefish_display(4, 8 * 1024),
+            Some((720, 1280, 280))
+        );
+        assert_eq!(recommended_cuttlefish_display(8, 16 * 1024), None);
+    }
+
+    #[test]
+    fn ensure_nonempty_webrtc_custom_css_fills_empty_file() {
+        let unique = format!(
+            "aadk-cf-css-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let root = std::env::temp_dir().join(unique);
+        let assets = root.join("usr/share/webrtc/assets");
+        fs::create_dir_all(&assets).expect("create assets dir");
+        let css = assets.join("custom.css");
+        fs::write(&css, "").expect("create empty css");
+
+        let patched = ensure_nonempty_webrtc_custom_css(&root).expect("patch css");
+        assert!(patched);
+        let data = fs::read_to_string(&css).expect("read patched css");
+        assert!(data.contains("AADK"));
+
+        let patched_again = ensure_nonempty_webrtc_custom_css(&root).expect("second patch css");
+        assert!(!patched_again);
+
+        let _ = fs::remove_dir_all(root);
+    }
 }
