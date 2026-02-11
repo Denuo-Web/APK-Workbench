@@ -4,11 +4,12 @@ use aadk_proto::aadk::v1::{
     job_service_client::JobServiceClient, target_service_server::TargetService, ErrorCode,
     GetCuttlefishStatusRequest, GetCuttlefishStatusResponse, GetDefaultTargetRequest,
     GetDefaultTargetResponse, Id, InstallApkRequest, InstallApkResponse, InstallCuttlefishRequest,
-    InstallCuttlefishResponse, JobState, KeyValue, LaunchRequest, LaunchResponse,
-    ListTargetsRequest, ListTargetsResponse, LogcatEvent, ReloadStateRequest, ReloadStateResponse,
-    ResolveCuttlefishBuildRequest, ResolveCuttlefishBuildResponse, SetDefaultTargetRequest,
-    SetDefaultTargetResponse, StartCuttlefishRequest, StartCuttlefishResponse, StopAppRequest,
-    StopAppResponse, StopCuttlefishRequest, StopCuttlefishResponse, StreamLogcatRequest, Target,
+    InstallCuttlefishResponse, JobFilter, JobState, KeyValue, LaunchRequest, LaunchResponse,
+    ListJobsRequest, ListTargetsRequest, ListTargetsResponse, LogcatEvent, Pagination,
+    ReloadStateRequest, ReloadStateResponse, ResolveCuttlefishBuildRequest,
+    ResolveCuttlefishBuildResponse, SetDefaultTargetRequest, SetDefaultTargetResponse,
+    StartCuttlefishRequest, StartCuttlefishResponse, StopAppRequest, StopAppResponse,
+    StopCuttlefishRequest, StopCuttlefishResponse, StreamLogcatRequest, Target, Timestamp,
 };
 use aadk_util::{now_millis, now_ts};
 use tokio::{
@@ -22,7 +23,7 @@ use tracing::warn;
 
 use crate::adb::{
     adb_collect_props, adb_connect, adb_failure_message, adb_failure_status, adb_get_state,
-    adb_output, adb_path, format_adb_output, AdbFailure,
+    adb_list_devices, adb_output, adb_path, format_adb_output, AdbFailure,
 };
 use crate::cuttlefish::{
     cuttlefish_adb_serial, cuttlefish_status, host_page_size, maybe_cuttlefish_target,
@@ -103,6 +104,184 @@ async fn fetch_targets(include_offline: bool) -> Result<Vec<Target>, Status> {
     }
 
     Ok(targets)
+}
+
+fn upsert_detail(details: &mut Vec<KeyValue>, key: &str, value: impl Into<String>) {
+    let value = value.into();
+    if let Some(existing) = details.iter_mut().find(|item| item.key == key) {
+        existing.value = value;
+    } else {
+        details.push(KeyValue {
+            key: key.to_string(),
+            value,
+        });
+    }
+}
+
+fn cuttlefish_state_from_adb_state(adb_state: &str) -> Option<&'static str> {
+    match adb_state {
+        "device" => Some("running"),
+        "offline" | "unauthorized" | "recovery" | "bootloader" | "connecting" | "authorizing" => {
+            Some("starting")
+        }
+        _ => None,
+    }
+}
+
+fn cuttlefish_is_active_state(state: &str) -> bool {
+    matches!(state, "running" | "starting")
+}
+
+fn cuttlefish_is_stopped_like_state(state: &str) -> bool {
+    matches!(state, "stopped" | "not_installed")
+}
+
+fn target_matches_serial(target: &Target, serial_compare: &str) -> bool {
+    if normalize_target_id_for_compare(&target.address) == serial_compare {
+        return true;
+    }
+    target
+        .target_id
+        .as_ref()
+        .map(|id| normalize_target_id_for_compare(&id.value) == serial_compare)
+        .unwrap_or(false)
+}
+
+async fn resolve_cuttlefish_adb_state(
+    adb_serial: &str,
+    details: &mut Vec<KeyValue>,
+) -> Option<String> {
+    if adb_serial.trim().is_empty() {
+        return None;
+    }
+
+    let adb_serial = normalize_target_id(adb_serial);
+    let adb_serial_canonical = canonicalize_adb_serial(&adb_serial);
+    match adb_get_state(&adb_serial_canonical).await {
+        Ok(state) => {
+            upsert_detail(details, "adb_state", state.clone());
+            Some(state)
+        }
+        Err(err) => {
+            let serial_compare = normalize_target_id_for_compare(&adb_serial);
+            match adb_list_devices(true).await {
+                Ok(devices) => {
+                    if let Some(device) = devices
+                        .iter()
+                        .find(|target| target_matches_serial(target, &serial_compare))
+                    {
+                        let fallback_state = device.state.trim().to_string();
+                        if !fallback_state.is_empty() {
+                            upsert_detail(details, "adb_state", fallback_state.clone());
+                            upsert_detail(details, "adb_state_source", "adb devices -l");
+                            return Some(fallback_state);
+                        }
+                    }
+                }
+                Err(list_err) => {
+                    upsert_detail(details, "adb_devices_error", adb_failure_message(&list_err));
+                }
+            }
+            upsert_detail(details, "adb_state_error", adb_failure_message(&err));
+            None
+        }
+    }
+}
+
+async fn resolve_cuttlefish_status_snapshot() -> (String, String, Vec<KeyValue>) {
+    let mut details = Vec::new();
+    let mut adb_serial = cuttlefish_adb_serial();
+
+    let mut state = match cuttlefish_status().await {
+        Ok(status) => {
+            if !status.adb_serial.is_empty() {
+                adb_serial = status.adb_serial;
+            }
+            for (key, value) in status.details {
+                details.push(KeyValue {
+                    key: format!("cuttlefish_{key}"),
+                    value,
+                });
+            }
+            if !status.raw.is_empty() {
+                details.push(KeyValue {
+                    key: "cuttlefish_status_raw".into(),
+                    value: status.raw,
+                });
+            }
+            if status.running {
+                "running".to_string()
+            } else {
+                "stopped".to_string()
+            }
+        }
+        Err(CuttlefishStatusError::NotInstalled) => "not_installed".to_string(),
+        Err(CuttlefishStatusError::Failed(err)) => {
+            details.push(KeyValue {
+                key: "cuttlefish_status_error".into(),
+                value: err,
+            });
+            "error".to_string()
+        }
+    };
+
+    let adb_serial = normalize_target_id(&adb_serial);
+    if let Some(adb_state) = resolve_cuttlefish_adb_state(&adb_serial, &mut details).await {
+        if let Some(mapped_state) = cuttlefish_state_from_adb_state(&adb_state) {
+            match mapped_state {
+                // A confirmed online device should always surface as running.
+                "running" => {
+                    if state != "not_installed" {
+                        state = "running".to_string();
+                    }
+                }
+                // Do not override a stopped snapshot with stale adb offline/unauthorized entries.
+                "starting" => {
+                    if state == "error" {
+                        state = "starting".to_string();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    (state, adb_serial, details)
+}
+
+async fn find_running_cuttlefish_job(
+    client: &mut JobServiceClient<Channel>,
+    job_type: &str,
+) -> Result<Option<String>, Status> {
+    const STALE_RUNNING_JOB_WINDOW_MS: i64 = 10 * 60 * 1000;
+    let cutoff = now_millis().saturating_sub(STALE_RUNNING_JOB_WINDOW_MS);
+    let response = client
+        .list_jobs(ListJobsRequest {
+            page: Some(Pagination {
+                page_size: 16,
+                page_token: String::new(),
+            }),
+            filter: Some(JobFilter {
+                job_types: vec![job_type.to_string()],
+                states: vec![JobState::Running as i32],
+                created_after: Some(Timestamp {
+                    unix_millis: cutoff,
+                }),
+                created_before: None,
+                finished_after: None,
+                finished_before: None,
+                correlation_id: String::new(),
+                run_id: None,
+            }),
+        })
+        .await
+        .map_err(|err| Status::unavailable(format!("failed to query running jobs: {err}")))?;
+    let running_job_id = response.into_inner().jobs.into_iter().find_map(|job| {
+        job.job_id
+            .map(|id| id.value)
+            .filter(|value| !value.is_empty())
+    });
+    Ok(running_job_id)
 }
 
 #[allow(clippy::result_large_err)]
@@ -995,8 +1174,37 @@ impl TargetService for Svc {
     ) -> Result<Response<StartCuttlefishResponse>, Status> {
         let req = request.into_inner();
         let show_full_ui = req.show_full_ui;
-
         let mut job_client = connect_job().await?;
+        let running_stop_job =
+            find_running_cuttlefish_job(&mut job_client, "targets.cuttlefish.stop").await?;
+        let running_start_job =
+            find_running_cuttlefish_job(&mut job_client, "targets.cuttlefish.start").await?;
+        let (state, adb_serial, _) = resolve_cuttlefish_status_snapshot().await;
+        if let Some(running_job_id) = running_stop_job {
+            if state == "stopping" {
+                return Err(Status::failed_precondition(format!(
+                    "cuttlefish stop job already running (job_id={running_job_id}); wait for it to finish before starting"
+                )));
+            }
+        }
+        if cuttlefish_is_active_state(&state) {
+            let adb_detail = if adb_serial.trim().is_empty() {
+                String::new()
+            } else {
+                format!(" (adb={adb_serial})")
+            };
+            return Err(Status::failed_precondition(format!(
+                "cuttlefish is already {state}{adb_detail}; stop it before starting again"
+            )));
+        }
+        if let Some(running_job_id) = running_start_job {
+            if state == "starting" {
+                return Err(Status::failed_precondition(format!(
+                    "cuttlefish start job already running (job_id={running_job_id})"
+                )));
+            }
+        }
+
         let job_id = req
             .job_id
             .as_ref()
@@ -1035,6 +1243,16 @@ impl TargetService for Svc {
     ) -> Result<Response<StopCuttlefishResponse>, Status> {
         let req = _request.into_inner();
         let mut job_client = connect_job().await?;
+        if let Some(running_job_id) =
+            find_running_cuttlefish_job(&mut job_client, "targets.cuttlefish.stop").await?
+        {
+            let (state, _, _) = resolve_cuttlefish_status_snapshot().await;
+            if state == "stopping" {
+                return Err(Status::failed_precondition(format!(
+                    "cuttlefish stop job already running (job_id={running_job_id})"
+                )));
+            }
+        }
         let job_id = req
             .job_id
             .as_ref()
@@ -1068,54 +1286,37 @@ impl TargetService for Svc {
         &self,
         _request: Request<GetCuttlefishStatusRequest>,
     ) -> Result<Response<GetCuttlefishStatusResponse>, Status> {
-        let mut details = Vec::new();
-        let mut adb_serial = cuttlefish_adb_serial();
+        let (mut state, adb_serial, mut details) = resolve_cuttlefish_status_snapshot().await;
+        match connect_job().await {
+            Ok(mut job_client) => {
+                let running_stop =
+                    find_running_cuttlefish_job(&mut job_client, "targets.cuttlefish.stop").await?;
+                let running_start =
+                    find_running_cuttlefish_job(&mut job_client, "targets.cuttlefish.start")
+                        .await?;
 
-        let state = match cuttlefish_status().await {
-            Ok(status) => {
-                if !status.adb_serial.is_empty() {
-                    adb_serial = status.adb_serial;
-                }
-                for (key, value) in status.details {
-                    details.push(KeyValue {
-                        key: format!("cuttlefish_{key}"),
-                        value,
-                    });
-                }
-                if !status.raw.is_empty() {
-                    details.push(KeyValue {
-                        key: "cuttlefish_status_raw".into(),
-                        value: status.raw,
-                    });
-                }
-                if status.running {
-                    "running".to_string()
-                } else {
-                    "stopped".to_string()
+                if let Some(job_id) = running_stop {
+                    if !cuttlefish_is_stopped_like_state(&state) {
+                        state = "stopping".into();
+                    } else {
+                        upsert_detail(&mut details, "cuttlefish_stop_job_stale", job_id.clone());
+                    }
+                    upsert_detail(&mut details, "cuttlefish_stop_job", job_id);
+                } else if let Some(job_id) = running_start {
+                    if state != "running" && !cuttlefish_is_stopped_like_state(&state) {
+                        state = "starting".into();
+                    } else if cuttlefish_is_stopped_like_state(&state) {
+                        upsert_detail(&mut details, "cuttlefish_start_job_stale", job_id.clone());
+                    }
+                    upsert_detail(&mut details, "cuttlefish_start_job", job_id);
                 }
             }
-            Err(CuttlefishStatusError::NotInstalled) => "not_installed".to_string(),
-            Err(CuttlefishStatusError::Failed(err)) => {
-                details.push(KeyValue {
-                    key: "cuttlefish_status_error".into(),
-                    value: err,
-                });
-                "error".to_string()
-            }
-        };
-
-        let adb_serial = normalize_target_id(&adb_serial);
-        let adb_serial_canonical = canonicalize_adb_serial(&adb_serial);
-        if !adb_serial.is_empty() {
-            match adb_get_state(&adb_serial_canonical).await {
-                Ok(adb_state) => details.push(KeyValue {
-                    key: "adb_state".into(),
-                    value: adb_state,
-                }),
-                Err(err) => details.push(KeyValue {
-                    key: "adb_state_error".into(),
-                    value: adb_failure_message(&err),
-                }),
+            Err(err) => {
+                upsert_detail(
+                    &mut details,
+                    "cuttlefish_job_status_error",
+                    format!("unable to query job service: {err}"),
+                );
             }
         }
 
