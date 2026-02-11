@@ -3026,11 +3026,18 @@ pub(crate) async fn handle_command(
 
             if !job_id.is_empty() {
                 let job_addr = cfg.job_addr.clone();
+                let targets_addr = cfg.targets_addr.clone();
                 let ui_stream = ui.clone();
                 let ui_err = ui.clone();
                 stream_tasks.spawn(async move {
-                    if let Err(err) =
-                        stream_job_events(job_addr, job_id.clone(), "targets", ui_stream).await
+                    if let Err(err) = stream_job_events_with_targets_status(
+                        job_addr,
+                        Some(targets_addr),
+                        job_id.clone(),
+                        "targets",
+                        ui_stream,
+                    )
+                    .await
                     {
                         let _ = ui_err.send(AppEvent::Log {
                             page: "targets",
@@ -3087,8 +3094,19 @@ pub(crate) async fn handle_command(
                 line: format!("Connecting to TargetService at {}\n", cfg.targets_addr),
             })
             .ok();
-            let mut client = TargetServiceClient::new(connect(&cfg.targets_addr).await?);
-            let resp = client
+            let channel = match connect(&cfg.targets_addr).await {
+                Ok(channel) => channel,
+                Err(err) => {
+                    ui.send(AppEvent::Log {
+                        page: "targets",
+                        line: format!("TargetService connection failed: {err}\n"),
+                    })
+                    .ok();
+                    return Ok(());
+                }
+            };
+            let mut client = TargetServiceClient::new(channel);
+            let resp = match client
                 .start_cuttlefish(StartCuttlefishRequest {
                     show_full_ui,
                     job_id: job_id
@@ -3100,8 +3118,18 @@ pub(crate) async fn handle_command(
                     correlation_id: correlation_id.trim().to_string(),
                     run_id: run_id_from_optional(&correlation_id),
                 })
-                .await?
-                .into_inner();
+                .await
+            {
+                Ok(resp) => resp.into_inner(),
+                Err(err) => {
+                    ui.send(AppEvent::Log {
+                        page: "targets",
+                        line: format!("Start Cuttlefish failed: {err}\n"),
+                    })
+                    .ok();
+                    return Ok(());
+                }
+            };
 
             let job_id = resp.job_id.map(|i| i.value).unwrap_or_default();
             ui.send(AppEvent::Log {
@@ -3109,14 +3137,26 @@ pub(crate) async fn handle_command(
                 line: format!("Cuttlefish start job: {job_id}\n"),
             })
             .ok();
+            ui.send(AppEvent::TargetsCuttlefishState {
+                state: "starting".into(),
+                adb_serial: String::new(),
+            })
+            .ok();
 
             if !job_id.is_empty() {
                 let job_addr = cfg.job_addr.clone();
+                let targets_addr = cfg.targets_addr.clone();
                 let ui_stream = ui.clone();
                 let ui_err = ui.clone();
                 stream_tasks.spawn(async move {
-                    if let Err(err) =
-                        stream_job_events(job_addr, job_id.clone(), "targets", ui_stream).await
+                    if let Err(err) = stream_job_events_with_targets_status(
+                        job_addr,
+                        Some(targets_addr),
+                        job_id.clone(),
+                        "targets",
+                        ui_stream,
+                    )
+                    .await
                     {
                         let _ = ui_err.send(AppEvent::Log {
                             page: "targets",
@@ -3137,8 +3177,19 @@ pub(crate) async fn handle_command(
                 line: format!("Connecting to TargetService at {}\n", cfg.targets_addr),
             })
             .ok();
-            let mut client = TargetServiceClient::new(connect(&cfg.targets_addr).await?);
-            let resp = client
+            let channel = match connect(&cfg.targets_addr).await {
+                Ok(channel) => channel,
+                Err(err) => {
+                    ui.send(AppEvent::Log {
+                        page: "targets",
+                        line: format!("TargetService connection failed: {err}\n"),
+                    })
+                    .ok();
+                    return Ok(());
+                }
+            };
+            let mut client = TargetServiceClient::new(channel);
+            let resp = match client
                 .stop_cuttlefish(StopCuttlefishRequest {
                     job_id: job_id
                         .as_ref()
@@ -3149,8 +3200,18 @@ pub(crate) async fn handle_command(
                     correlation_id: correlation_id.trim().to_string(),
                     run_id: run_id_from_optional(&correlation_id),
                 })
-                .await?
-                .into_inner();
+                .await
+            {
+                Ok(resp) => resp.into_inner(),
+                Err(err) => {
+                    ui.send(AppEvent::Log {
+                        page: "targets",
+                        line: format!("Stop Cuttlefish failed: {err}\n"),
+                    })
+                    .ok();
+                    return Ok(());
+                }
+            };
 
             let job_id = resp.job_id.map(|i| i.value).unwrap_or_default();
             ui.send(AppEvent::Log {
@@ -3158,14 +3219,26 @@ pub(crate) async fn handle_command(
                 line: format!("Cuttlefish stop job: {job_id}\n"),
             })
             .ok();
+            ui.send(AppEvent::TargetsCuttlefishState {
+                state: "stopping".into(),
+                adb_serial: String::new(),
+            })
+            .ok();
 
             if !job_id.is_empty() {
                 let job_addr = cfg.job_addr.clone();
+                let targets_addr = cfg.targets_addr.clone();
                 let ui_stream = ui.clone();
                 let ui_err = ui.clone();
                 stream_tasks.spawn(async move {
-                    if let Err(err) =
-                        stream_job_events(job_addr, job_id.clone(), "targets", ui_stream).await
+                    if let Err(err) = stream_job_events_with_targets_status(
+                        job_addr,
+                        Some(targets_addr),
+                        job_id.clone(),
+                        "targets",
+                        ui_stream,
+                    )
+                    .await
                     {
                         let _ = ui_err.send(AppEvent::Log {
                             page: "targets",
@@ -3182,23 +3255,13 @@ pub(crate) async fn handle_command(
                 line: format!("Connecting to TargetService at {}\n", cfg.targets_addr),
             })
             .ok();
-            let mut client = TargetServiceClient::new(connect(&cfg.targets_addr).await?);
-            let resp = client
-                .get_cuttlefish_status(GetCuttlefishStatusRequest {})
-                .await?
-                .into_inner();
-            ui.send(AppEvent::Log {
-                page: "targets",
-                line: format!(
-                    "Cuttlefish state: {} (adb={})\n",
-                    resp.state, resp.adb_serial
-                ),
-            })
-            .ok();
-            for kv in resp.details {
+            if let Err(err) =
+                fetch_and_emit_cuttlefish_status(&cfg.targets_addr, "targets", &ui, "manual", true)
+                    .await
+            {
                 ui.send(AppEvent::Log {
                     page: "targets",
-                    line: format!("- {}: {}\n", kv.key, kv.value),
+                    line: format!("Get Cuttlefish status failed: {err}\n"),
                 })
                 .ok();
             }
@@ -4726,6 +4789,67 @@ async fn stream_job_events(
     page: &'static str,
     ui: UiEventSender,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    stream_job_events_with_targets_status(addr, None, job_id, page, ui).await
+}
+
+fn is_terminal_job_event(evt: &JobEvent) -> bool {
+    match evt.payload.as_ref() {
+        Some(JobPayload::Completed(_)) | Some(JobPayload::Failed(_)) => true,
+        Some(JobPayload::StateChanged(state)) => {
+            let state = JobState::try_from(state.new_state).unwrap_or(JobState::Unspecified);
+            matches!(
+                state,
+                JobState::Success | JobState::Failed | JobState::Cancelled
+            )
+        }
+        _ => false,
+    }
+}
+
+async fn fetch_and_emit_cuttlefish_status(
+    targets_addr: &str,
+    page: &'static str,
+    ui: &UiEventSender,
+    reason: &str,
+    include_details: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = TargetServiceClient::new(connect(targets_addr).await?);
+    let resp = client
+        .get_cuttlefish_status(GetCuttlefishStatusRequest {})
+        .await?
+        .into_inner();
+    ui.send(AppEvent::Log {
+        page,
+        line: format!(
+            "Cuttlefish state ({reason}): {} (adb={})\n",
+            resp.state, resp.adb_serial
+        ),
+    })
+    .ok();
+    ui.send(AppEvent::TargetsCuttlefishState {
+        state: resp.state.clone(),
+        adb_serial: resp.adb_serial.clone(),
+    })
+    .ok();
+    if include_details {
+        for kv in resp.details {
+            ui.send(AppEvent::Log {
+                page,
+                line: format!("- {}: {}\n", kv.key, kv.value),
+            })
+            .ok();
+        }
+    }
+    Ok(())
+}
+
+async fn stream_job_events_with_targets_status(
+    addr: String,
+    targets_addr: Option<String>,
+    job_id: String,
+    page: &'static str,
+    ui: UiEventSender,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = JobServiceClient::new(connect(&addr).await?);
     let mut stream = client
         .stream_job_events(StreamJobEventsRequest {
@@ -4736,6 +4860,7 @@ async fn stream_job_events(
         })
         .await?
         .into_inner();
+    let mut pending_cuttlefish_refresh = targets_addr;
 
     while let Some(item) = stream.next().await {
         match item {
@@ -4768,6 +4893,27 @@ async fn stream_job_events(
                 }
                 for line in stream_job_event_lines(&job_id, &evt) {
                     ui.send(AppEvent::Log { page, line }).ok();
+                }
+                if is_terminal_job_event(&evt) {
+                    if let Some(targets_addr) = pending_cuttlefish_refresh.take() {
+                        if let Err(err) = fetch_and_emit_cuttlefish_status(
+                            &targets_addr,
+                            page,
+                            &ui,
+                            "job terminal",
+                            false,
+                        )
+                        .await
+                        {
+                            ui.send(AppEvent::Log {
+                                page,
+                                line: format!(
+                                    "Cuttlefish status refresh failed after job {job_id}: {err}\n"
+                                ),
+                            })
+                            .ok();
+                        }
+                    }
                 }
             }
             Err(err) => {

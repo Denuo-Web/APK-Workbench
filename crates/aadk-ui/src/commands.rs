@@ -345,6 +345,10 @@ pub(crate) enum AppEvent {
     SetCuttlefishBuildId {
         build_id: String,
     },
+    TargetsCuttlefishState {
+        state: String,
+        adb_serial: String,
+    },
     ToolchainAvailable {
         provider_id: String,
         versions: Vec<String>,

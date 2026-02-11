@@ -135,6 +135,9 @@ pub(crate) struct TargetsPage {
     pub(crate) use_job_id_check: gtk::CheckButton,
     pub(crate) job_id_entry: gtk::Entry,
     pub(crate) correlation_id_entry: gtk::Entry,
+    pub(crate) cuttlefish_status_button: gtk::Button,
+    pub(crate) cuttlefish_start_button: gtk::Button,
+    pub(crate) cuttlefish_stop_button: gtk::Button,
     pub(crate) cuttlefish_branch_entry: gtk::Entry,
     pub(crate) cuttlefish_target_entry: gtk::Entry,
     pub(crate) apk_entry: gtk::Entry,
@@ -314,6 +317,34 @@ impl TargetsPage {
         let trimmed = build_id.trim();
         if !trimmed.is_empty() {
             self.cuttlefish_build_entry.set_text(trimmed);
+        }
+    }
+
+    pub(crate) fn set_cuttlefish_state(&self, state: &str, adb_serial: &str) {
+        let normalized = state.trim().to_ascii_lowercase();
+        let display_state = if normalized.is_empty() {
+            "unknown"
+        } else {
+            normalized.as_str()
+        };
+        self.cuttlefish_status_button
+            .set_label(&format!("Status ({display_state})"));
+        if !adb_serial.trim().is_empty() {
+            self.target_entry.set_text(adb_serial.trim());
+        }
+        match display_state {
+            "running" | "starting" => {
+                self.cuttlefish_start_button.set_sensitive(false);
+                self.cuttlefish_stop_button.set_sensitive(true);
+            }
+            "stopping" => {
+                self.cuttlefish_start_button.set_sensitive(false);
+                self.cuttlefish_stop_button.set_sensitive(false);
+            }
+            _ => {
+                self.cuttlefish_start_button.set_sensitive(true);
+                self.cuttlefish_stop_button.set_sensitive(true);
+            }
         }
     }
 
@@ -2963,6 +2994,8 @@ pub(crate) fn page_targets(
     let resolve_build = gtk::Button::with_label("Resolve build");
     let start = gtk::Button::with_label("Start");
     let stop = gtk::Button::with_label("Stop");
+    status.set_label("Status (unknown)");
+    stop.set_sensitive(true);
     set_tooltip(&status, "What: Check Cuttlefish status. Why: verify host readiness and running state. How: click to query TargetService.");
     set_tooltip(&web_ui, "What: Open the Cuttlefish WebRTC UI in your browser. Why: access the virtual device UI. How: click; uses AADK_CUTTLEFISH_WEBRTC_URL or https://localhost:8443.");
     set_tooltip(&env_ui, "What: Open the Cuttlefish environment control UI. Why: manage environment toggles. How: click; uses AADK_CUTTLEFISH_ENV_URL or https://localhost:1443.");
@@ -3451,11 +3484,21 @@ pub(crate) fn page_targets(
             .ok();
     });
 
+    {
+        let cfg = cfg.lock().unwrap().clone();
+        cmd_tx
+            .try_send(UiCommand::TargetsCuttlefishStatus { cfg })
+            .ok();
+    }
+
     TargetsPage {
         page,
         use_job_id_check,
         job_id_entry,
         correlation_id_entry,
+        cuttlefish_status_button: status,
+        cuttlefish_start_button: start,
+        cuttlefish_stop_button: stop,
         cuttlefish_branch_entry,
         cuttlefish_target_entry,
         apk_entry,
