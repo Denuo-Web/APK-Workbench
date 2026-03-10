@@ -74,6 +74,12 @@ Default addresses (override with env vars):
   unless explicit display args are provided.
 - TargetService Cuttlefish start patches empty WebRTC `custom.css` assets in local Cuttlefish
   image dirs to avoid intermittent browser stylesheet dropouts.
+- TargetService now treats the Cuttlefish Debian host packages as part of host-tool readiness:
+  unless `AADK_CUTTLEFISH_START_CMD` overrides startup, `/usr/lib/cuttlefish-common/bin/capability_query.py`
+  (or `AADK_CUTTLEFISH_CAPABILITY_QUERY`) must exist or install/start/status surfaces a host-tools-incomplete error.
+- TargetService default Debian host installs prefer passwordless `sudo -n`, but can fall back to
+  `pkexec` in graphical sessions so package reinstalls still work when the local host bundle exists
+  but the system Cuttlefish helpers were removed.
 - ToolchainService downloads SDK/NDK archives, verifies sha256, persists state under ~/.local/share/aadk.
 - ToolchainService normalizes SDK cmdline-tools layout by creating cmdline-tools/latest links when
   archives ship a flat cmdline-tools/bin + lib layout.

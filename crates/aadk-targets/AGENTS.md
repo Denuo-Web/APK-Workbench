@@ -71,6 +71,9 @@ Update this file whenever TargetService behavior changes or when commits touchin
 - InstallApk, Launch, StopApp, and Cuttlefish job RPCs accept optional job_id for existing jobs
   plus correlation_id and run_id for grouping related workflows.
 - Cuttlefish start preflight checks host tools, images, and KVM availability/access (configurable) and logs images-dir fallback/missing hints.
+- Host-tool readiness now requires more than a bundled `launch_cvd` binary: unless `AADK_CUTTLEFISH_START_CMD` overrides startup, the service also expects `/usr/lib/cuttlefish-common/bin/capability_query.py` (or `AADK_CUTTLEFISH_CAPABILITY_QUERY`) so removed Debian host packages are detected as incomplete instead of being treated as installed.
+- InstallCuttlefish now re-validates host readiness after the host-install phase and fails with a clear host-tools-incomplete error when the capability-query script is missing, preventing false "installed" successes.
+- InstallCuttlefish now prefers passwordless `sudo -n` for the default apt-based host install, but falls back to `pkexec` in graphical sessions so desktop users can approve package installation without restarting the whole stack as root.
 - Defaults align with aosp-android-latest-release and aosp_cf_*_only_phone-userdebug targets; 16K hosts use main-16k-with-phones with aosp_cf_arm64/aosp_cf_x86_64.
 - GPU mode can be set via AADK_CUTTLEFISH_GPU_MODE and is appended to launch arguments when starting Cuttlefish.
 - Start adds --start_webrtc based on show_full_ui or headless display detection unless already provided in AADK_CUTTLEFISH_START_ARGS.
@@ -107,6 +110,7 @@ Update this file whenever TargetService behavior changes or when commits touchin
 - AADK_CUTTLEFISH_HOME=/path (or _16K/_4K variants)
 - AADK_CUTTLEFISH_IMAGES_DIR=/path (or _16K/_4K variants)
 - AADK_CUTTLEFISH_HOST_DIR=/path (or _16K/_4K variants)
+- AADK_CUTTLEFISH_CAPABILITY_QUERY=/path/to/capability_query.py
 - AADK_CUTTLEFISH_START_CMD / AADK_CUTTLEFISH_START_ARGS
 - AADK_CUTTLEFISH_AUTO_RESOURCES=1|0
 - AADK_CUTTLEFISH_CPUS=<n>

@@ -42,6 +42,9 @@ pub(crate) enum CuttlefishStatusError {
     Failed(String),
 }
 
+const CUTTLEFISH_CAPABILITY_QUERY_DEFAULT_PATH: &str =
+    "/usr/lib/cuttlefish-common/bin/capability_query.py";
+
 fn cuttlefish_enabled() -> bool {
     match std::env::var("AADK_CUTTLEFISH_ENABLE") {
         Ok(val) => !(val == "0" || val.eq_ignore_ascii_case("false")),
@@ -104,6 +107,54 @@ fn cuttlefish_launch_bin() -> String {
 
 fn cuttlefish_stop_bin() -> String {
     std::env::var("AADK_STOP_CVD_BIN").unwrap_or_else(|_| "stop_cvd".into())
+}
+
+fn cuttlefish_capability_query_path() -> Option<PathBuf> {
+    if let Some(path) = read_env_trimmed("AADK_CUTTLEFISH_CAPABILITY_QUERY") {
+        let candidate = PathBuf::from(path);
+        return candidate.is_file().then_some(candidate);
+    }
+    let candidate = PathBuf::from(CUTTLEFISH_CAPABILITY_QUERY_DEFAULT_PATH);
+    candidate.is_file().then_some(candidate)
+}
+
+fn cuttlefish_host_tools_issue_for_detection(
+    has_custom_start_cmd: bool,
+    has_cvd: bool,
+    has_launch: bool,
+    has_capability_query: bool,
+) -> Option<String> {
+    if has_custom_start_cmd {
+        return None;
+    }
+    if !has_cvd && !has_launch {
+        return Some(
+            "launch_cvd/cvd host tools not found; install Cuttlefish host tools or set \
+             AADK_CUTTLEFISH_START_CMD"
+                .into(),
+        );
+    }
+    if !has_capability_query {
+        return Some(format!(
+            "missing {}; reinstall cuttlefish-base/cuttlefish-user or set \
+             AADK_CUTTLEFISH_START_CMD",
+            CUTTLEFISH_CAPABILITY_QUERY_DEFAULT_PATH
+        ));
+    }
+    None
+}
+
+fn cuttlefish_host_tools_issue(page_size: Option<usize>) -> Option<String> {
+    cuttlefish_host_tools_issue_for_detection(
+        read_env_trimmed("AADK_CUTTLEFISH_START_CMD").is_some(),
+        cuttlefish_cvd_path().is_some(),
+        cuttlefish_launch_path(page_size).is_some(),
+        cuttlefish_capability_query_path().is_some(),
+    )
+}
+
+fn cuttlefish_host_tools_ready(page_size: Option<usize>) -> bool {
+    cuttlefish_host_tools_issue(page_size).is_none()
 }
 
 fn cuttlefish_gpu_mode() -> Option<String> {
@@ -541,12 +592,82 @@ fn is_root_user() -> bool {
     matches!(std::env::var("USER"), Ok(value) if value == "root")
 }
 
-fn sudo_prefix() -> Option<String> {
-    if is_root_user() {
-        return Some(String::new());
+fn pkexec_path() -> Option<PathBuf> {
+    find_command("pkexec")
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PrivilegedShellMode {
+    Direct,
+    Sudo,
+    Pkexec,
+}
+
+impl PrivilegedShellMode {
+    fn description(self) -> &'static str {
+        match self {
+            Self::Direct => "direct (already root)",
+            Self::Sudo => "sudo -n",
+            Self::Pkexec => "pkexec",
+        }
     }
-    let sudo = find_command("sudo")?;
-    Some(format!("{} -n ", sudo.display()))
+}
+
+async fn privileged_shell_command(command: &str) -> Result<(String, PrivilegedShellMode), String> {
+    if is_root_user() {
+        return Ok((command.to_string(), PrivilegedShellMode::Direct));
+    }
+
+    if let Some(sudo) = find_command("sudo") {
+        let sudo_path = sudo.display().to_string();
+        let probe = format!("{} -n true", shell_escape(&sudo_path));
+        match run_shell_command_raw(&probe).await {
+            Ok((true, _, _, _)) => {
+                return Ok((
+                    format!(
+                        "{} -n /bin/sh -lc {}",
+                        shell_escape(&sudo_path),
+                        shell_escape(command)
+                    ),
+                    PrivilegedShellMode::Sudo,
+                ));
+            }
+            Ok(_) | Err(_) => {}
+        }
+    }
+
+    if let Some(pkexec) = pkexec_path() {
+        if local_display_available() {
+            let pkexec_path = pkexec.display().to_string();
+            return Ok((
+                format!(
+                    "{} /bin/sh -lc {}",
+                    shell_escape(&pkexec_path),
+                    shell_escape(command)
+                ),
+                PrivilegedShellMode::Pkexec,
+            ));
+        }
+    }
+
+    let mut reasons = Vec::new();
+    if find_command("sudo").is_some() {
+        reasons.push("passwordless sudo unavailable".to_string());
+    } else {
+        reasons.push("sudo not installed".to_string());
+    }
+    if pkexec_path().is_some() {
+        if !local_display_available() {
+            reasons.push("no local display for pkexec authentication".to_string());
+        }
+    } else {
+        reasons.push("pkexec not installed".to_string());
+    }
+    reasons.push(
+        "run aadk-ui in a graphical session, run aadk-targets as root, or set AADK_CUTTLEFISH_INSTALL_CMD"
+            .to_string(),
+    );
+    Err(reasons.join("; "))
 }
 
 fn cuttlefish_env_for_page_size(base: &str, page_size: Option<usize>) -> Option<String> {
@@ -1204,6 +1325,7 @@ pub(crate) async fn cuttlefish_status() -> Result<CuttlefishStatus, CuttlefishSt
     let runtime_pids = cuttlefish_runtime_processes(&images_dir);
     let cvd_path = cuttlefish_cvd_path();
     let launch_path = cuttlefish_launch_path(page_size);
+    let host_tools_issue = cuttlefish_host_tools_issue(page_size);
     if cvd_path.is_none() && launch_path.is_none() {
         return Err(CuttlefishStatusError::NotInstalled);
     }
@@ -1221,6 +1343,16 @@ pub(crate) async fn cuttlefish_status() -> Result<CuttlefishStatus, CuttlefishSt
         status
             .details
             .push(("process_pids".into(), format_pid_list(&runtime_pids, 8)));
+    }
+    if let Some(issue) = host_tools_issue.as_ref() {
+        status
+            .details
+            .push(("host_tools_issue".into(), issue.clone()));
+        if runtime_pids.is_empty() {
+            return Err(CuttlefishStatusError::Failed(format!(
+                "host tools incomplete: {issue}"
+            )));
+        }
     }
 
     let Some(cvd_path) = cvd_path else {
@@ -1412,6 +1544,22 @@ pub(crate) async fn maybe_cuttlefish_target(
         key: "cuttlefish_host_dir".into(),
         value: cuttlefish_host_dir(page_size).display().to_string(),
     });
+    details.push(KeyValue {
+        key: "cuttlefish_host_tools_ready".into(),
+        value: cuttlefish_host_tools_ready(page_size).to_string(),
+    });
+    if let Some(path) = cuttlefish_capability_query_path() {
+        details.push(KeyValue {
+            key: "cuttlefish_capability_query_path".into(),
+            value: path.display().to_string(),
+        });
+    }
+    if let Some(issue) = cuttlefish_host_tools_issue(page_size) {
+        details.push(KeyValue {
+            key: "cuttlefish_host_tools_issue".into(),
+            value: issue,
+        });
+    }
     details.push(KeyValue {
         key: "cuttlefish_branch".into(),
         value: cuttlefish_branch(page_size),
@@ -1621,6 +1769,8 @@ fn classify_install_error(detail: &str) -> ErrorCode {
     if lower.contains("permission denied")
         || lower.contains("a password is required")
         || (lower.contains("sudo") && lower.contains("password"))
+        || lower.contains("not authorized")
+        || lower.contains("authentication failed")
     {
         ErrorCode::PermissionDenied
     } else {
@@ -2082,11 +2232,17 @@ async fn cuttlefish_preflight(
         ));
     }
 
-    if cuttlefish_cvd_path().is_none() && cuttlefish_launch_path(page_size).is_none() {
+    if let Some(issue) = cuttlefish_host_tools_issue(page_size) {
+        let _ = publish_log(
+            job_client,
+            job_id,
+            &format!("Cuttlefish host tools not ready: {issue}\n"),
+        )
+        .await;
         return Err(job_error_detail(
             ErrorCode::NotFound,
-            "Cuttlefish host tools not found",
-            "install Cuttlefish host tools or set AADK_LAUNCH_CVD_BIN".into(),
+            "Cuttlefish host tools not ready",
+            issue,
             job_id,
         ));
     }
@@ -2915,27 +3071,39 @@ pub(crate) async fn run_cuttlefish_install_job(job_id: String, options: Cuttlefi
     let images_dir = cuttlefish_images_dir(page_size);
     let host_dir = cuttlefish_host_dir(page_size);
 
-    let host_installed =
-        cuttlefish_cvd_path().is_some() || cuttlefish_launch_path(page_size).is_some();
+    let host_tools_issue = cuttlefish_host_tools_issue(page_size);
+    let host_installed = host_tools_issue.is_none();
     let images_ready = cuttlefish_images_ready(&images_dir);
     let kvm_status = kvm_status();
+    let mut environment_metrics = vec![
+        metric("page_size", page_size.unwrap_or_default()),
+        metric("home_dir", home_dir.display()),
+        metric("images_dir", images_dir.display()),
+        metric("host_dir", host_dir.display()),
+        metric("host_installed", host_installed),
+        metric("images_ready", images_ready),
+        metric("kvm_present", kvm_status.present),
+        metric("kvm_accessible", kvm_status.accessible),
+    ];
+    if let Some(issue) = host_tools_issue.as_ref() {
+        environment_metrics.push(metric("host_issue", issue));
+    }
     let _ = publish_progress(
         &mut job_client,
         &job_id,
         5,
         "checking environment",
-        vec![
-            metric("page_size", page_size.unwrap_or_default()),
-            metric("home_dir", home_dir.display()),
-            metric("images_dir", images_dir.display()),
-            metric("host_dir", host_dir.display()),
-            metric("host_installed", host_installed),
-            metric("images_ready", images_ready),
-            metric("kvm_present", kvm_status.present),
-            metric("kvm_accessible", kvm_status.accessible),
-        ],
+        environment_metrics,
     )
     .await;
+    if let Some(issue) = host_tools_issue.as_ref() {
+        let _ = publish_log(
+            &mut job_client,
+            &job_id,
+            &format!("Host tools incomplete: {issue}\n"),
+        )
+        .await;
+    }
 
     if cuttlefish_kvm_check_enabled() {
         let _ = publish_log(
@@ -2995,10 +3163,9 @@ pub(crate) async fn run_cuttlefish_install_job(job_id: String, options: Cuttlefi
         Err(_) => true,
     };
 
-    let sudo_prefix = sudo_prefix();
-
     if install_host && (!host_installed || options.force) {
         let mut used_default = false;
+        let mut privilege_mode = None;
         let install_cmd = if let Some(cmd) = read_env_trimmed("AADK_CUTTLEFISH_INSTALL_CMD") {
             cmd
         } else {
@@ -3042,27 +3209,31 @@ pub(crate) async fn run_cuttlefish_install_job(job_id: String, options: Cuttlefi
                 let _ = publish_failed(&mut job_client, &job_id, detail).await;
                 return;
             };
-            let sudo_prefix = match sudo_prefix.as_ref() {
-                Some(prefix) => prefix.as_str(),
-                None => {
-                    let detail = job_error_detail(
-                        ErrorCode::PermissionDenied,
-                        "sudo required for cuttlefish install",
-                        "install sudo or run aadk-targets as root (or set AADK_CUTTLEFISH_INSTALL_CMD)"
-                            .into(),
-                        &job_id,
-                    );
-                    let _ = publish_failed(&mut job_client, &job_id, detail).await;
-                    return;
-                }
-            };
             used_default = true;
-            let installer = installer_path.display();
+            let installer = shell_escape(&installer_path.display().to_string());
             let repo_key = "https://us-apt.pkg.dev/doc/repo-signing-key.gpg";
             let repo_line = "deb https://us-apt.pkg.dev/projects/android-cuttlefish-artifacts android-cuttlefish main";
-            format!(
-                "{sudo_prefix}{installer} update && {sudo_prefix}{installer} install -y curl ca-certificates && {sudo_prefix}curl -fsSL {repo_key} -o /etc/apt/trusted.gpg.d/artifact-registry.asc && {sudo_prefix}chmod a+r /etc/apt/trusted.gpg.d/artifact-registry.asc && {sudo_prefix}sh -lc \"echo '{repo_line}' > /etc/apt/sources.list.d/artifact-registry.list\" && {sudo_prefix}{installer} update && {sudo_prefix}{installer} install -y cuttlefish-base cuttlefish-user"
-            )
+            let install_script = format!(
+                "{installer} update && {installer} install -y curl ca-certificates && curl -fsSL {} -o /etc/apt/trusted.gpg.d/artifact-registry.asc && chmod a+r /etc/apt/trusted.gpg.d/artifact-registry.asc && sh -lc \"echo {} > /etc/apt/sources.list.d/artifact-registry.list\" && {installer} update && {installer} install -y cuttlefish-base cuttlefish-user",
+                shell_escape(repo_key),
+                shell_escape(repo_line),
+            );
+            match privileged_shell_command(&install_script).await {
+                Ok((command, mode)) => {
+                    privilege_mode = Some(mode);
+                    command
+                }
+                Err(detail) => {
+                    let error = job_error_detail(
+                        ErrorCode::PermissionDenied,
+                        "privileged install unavailable",
+                        detail,
+                        &job_id,
+                    );
+                    let _ = publish_failed(&mut job_client, &job_id, error).await;
+                    return;
+                }
+            }
         };
 
         if used_default {
@@ -3072,6 +3243,22 @@ pub(crate) async fn run_cuttlefish_install_job(job_id: String, options: Cuttlefi
                 "Using Debian/Ubuntu apt install from android-cuttlefish README\n",
             )
             .await;
+            if let Some(mode) = privilege_mode {
+                let _ = publish_log(
+                    &mut job_client,
+                    &job_id,
+                    &format!("Privilege escalation: {}\n", mode.description()),
+                )
+                .await;
+                if mode == PrivilegedShellMode::Pkexec {
+                    let _ = publish_log(
+                        &mut job_client,
+                        &job_id,
+                        "Approve the desktop authentication prompt if shown\n",
+                    )
+                    .await;
+                }
+            }
         }
         let _ = publish_log(
             &mut job_client,
@@ -3147,6 +3334,26 @@ pub(crate) async fn run_cuttlefish_install_job(job_id: String, options: Cuttlefi
         .await;
     }
 
+    let host_tools_issue = cuttlefish_host_tools_issue(page_size);
+    if let Some(issue) = host_tools_issue.as_ref() {
+        let _ = publish_log(
+            &mut job_client,
+            &job_id,
+            &format!("Host tools still incomplete after install: {issue}\n"),
+        )
+        .await;
+        if install_host {
+            let error = job_error_detail(
+                ErrorCode::Unavailable,
+                "Cuttlefish host tools incomplete",
+                issue.clone(),
+                &job_id,
+            );
+            let _ = publish_failed(&mut job_client, &job_id, error).await;
+            return;
+        }
+    }
+
     let required_groups = ["kvm", "cvdnetwork", "render"];
     let missing = match current_user_groups().await {
         Some(groups) => {
@@ -3192,28 +3399,83 @@ pub(crate) async fn run_cuttlefish_install_job(job_id: String, options: Cuttlefi
                 "Group setup not required; skipping usermod\n",
             )
             .await;
-        } else if let (Some(prefix), Ok(user)) = (sudo_prefix.as_ref(), std::env::var("USER")) {
+        } else if let Ok(user) = std::env::var("USER") {
             if !user.trim().is_empty() {
-                let group_cmd = format!("{prefix}usermod -aG kvm,cvdnetwork,render {user}");
-                let _ = publish_log(
-                    &mut job_client,
-                    &job_id,
-                    "Adding user to kvm/cvdnetwork/render groups\n",
-                )
-                .await;
-                let _ = run_shell_command(&group_cmd).await;
-                let _ = publish_log(
-                    &mut job_client,
-                    &job_id,
-                    "Re-login or reboot may be required for group changes to take effect\n",
-                )
-                .await;
+                if let Some(usermod_path) = find_command("usermod") {
+                    let group_script = format!(
+                        "{} -aG kvm,cvdnetwork,render {}",
+                        shell_escape(&usermod_path.display().to_string()),
+                        shell_escape(user.trim()),
+                    );
+                    match privileged_shell_command(&group_script).await {
+                        Ok((group_cmd, mode)) => {
+                            let _ = publish_log(
+                                &mut job_client,
+                                &job_id,
+                                &format!(
+                                    "Adding user to kvm/cvdnetwork/render groups via {}\n",
+                                    mode.description()
+                                ),
+                            )
+                            .await;
+                            match run_shell_command(&group_cmd).await {
+                                Ok((true, _, log)) => {
+                                    if !log.is_empty() {
+                                        let _ = publish_log(&mut job_client, &job_id, &log).await;
+                                    }
+                                    let _ = publish_log(
+                                        &mut job_client,
+                                        &job_id,
+                                        "Re-login or reboot may be required for group changes to take effect\n",
+                                    )
+                                    .await;
+                                }
+                                Ok((false, _, log)) => {
+                                    if !log.is_empty() {
+                                        let _ = publish_log(&mut job_client, &job_id, &log).await;
+                                    }
+                                    let _ = publish_log(
+                                        &mut job_client,
+                                        &job_id,
+                                        "Group setup failed; add the user to kvm/cvdnetwork/render manually if needed\n",
+                                    )
+                                    .await;
+                                }
+                                Err(err) => {
+                                    let _ = publish_log(
+                                        &mut job_client,
+                                        &job_id,
+                                        &format!(
+                                            "Group setup failed to start: {err}; add the user to kvm/cvdnetwork/render manually if needed\n"
+                                        ),
+                                    )
+                                    .await;
+                                }
+                            }
+                        }
+                        Err(detail) => {
+                            let _ = publish_log(
+                                &mut job_client,
+                                &job_id,
+                                &format!("Skipping group setup: {detail}\n"),
+                            )
+                            .await;
+                        }
+                    }
+                } else {
+                    let _ = publish_log(
+                        &mut job_client,
+                        &job_id,
+                        "Skipping group setup; usermod not found\n",
+                    )
+                    .await;
+                }
             }
         } else {
             let _ = publish_log(
                 &mut job_client,
                 &job_id,
-                "Skipping group setup; sudo unavailable\n",
+                "Skipping group setup; USER is not set\n",
             )
             .await;
         }
@@ -3610,7 +3872,23 @@ pub(crate) async fn run_cuttlefish_install_job(job_id: String, options: Cuttlefi
             key: "kvm_access".into(),
             value: kvm_status.accessible.to_string(),
         },
+        KeyValue {
+            key: "host_installed".into(),
+            value: cuttlefish_host_tools_ready(page_size).to_string(),
+        },
     ];
+    if let Some(path) = cuttlefish_capability_query_path() {
+        outputs.push(KeyValue {
+            key: "capability_query_path".into(),
+            value: path.display().to_string(),
+        });
+    }
+    if let Some(issue) = host_tools_issue {
+        outputs.push(KeyValue {
+            key: "host_issue".into(),
+            value: issue,
+        });
+    }
     if let Some(detail) = kvm_status.detail {
         outputs.push(KeyValue {
             key: "kvm_detail".into(),
@@ -3645,6 +3923,18 @@ mod tests {
             "open: /dev/net/tun: No such file or directory"
         ));
         assert!(!tap_permission_error("invalid argument"));
+    }
+
+    #[test]
+    fn host_tools_require_capability_query_when_using_default_launchers() {
+        let issue = cuttlefish_host_tools_issue_for_detection(false, false, true, false)
+            .expect("expected missing capability query to be reported");
+        assert!(issue.contains("capability_query.py"));
+    }
+
+    #[test]
+    fn host_tools_allow_custom_start_command_without_capability_query() {
+        assert!(cuttlefish_host_tools_issue_for_detection(true, false, false, false).is_none());
     }
 
     #[test]
