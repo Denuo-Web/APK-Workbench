@@ -8,6 +8,10 @@ streams job state/progress/logs to clients.
 
 ## Supported host
 - Linux ARM64 (aarch64) is the only supported host for running the full stack (services/UI/Cuttlefish).
+- Debian 13 on Linux ARM64 is the primary validated distro for full-stack support, release smoke tests,
+  and Cuttlefish host-tool automation.
+- Non-Debian Linux ARM64 hosts are experimental for the full stack and generally require explicit
+  overrides such as `AADK_CUTTLEFISH_INSTALL_CMD`.
 - x86_64 is intentionally out of scope because Android Studio already covers it.
 - Toolchain catalog includes Linux ARM64 SDK/NDK artifacts plus Windows ARM64 NDK artifacts (r29/r28c/r27d);
   no darwin SDK/NDK artifacts are published in the custom catalogs.
@@ -92,13 +96,15 @@ This repo does not bundle third-party toolchains; services download or invoke th
     currently published in the custom catalogs.
   - These repos are MIT licensed; review upstream Android SDK/NDK terms if you plan to redistribute.
 - Cuttlefish host tools install uses the android-cuttlefish apt repo on Debian/Ubuntu by default
-  (`https://us-apt.pkg.dev/projects/android-cuttlefish-artifacts`); override with
-  `AADK_CUTTLEFISH_INSTALL_CMD` for other distros.
+  (`https://us-apt.pkg.dev/projects/android-cuttlefish-artifacts`); Debian 13 is the validated
+  path, and other distros require `AADK_CUTTLEFISH_INSTALL_CMD`.
 - Cuttlefish images from `ci.android.com` / `android-ci.googleusercontent.com`.
 - Gradle via `gradlew` or system `gradle`.
 - adb/platform-tools from the Android SDK or Cuttlefish host tools.
 
 ## Quick start (Debian 13 aarch64)
+This is the primary validated host path for the full stack. Other Linux ARM64 distros may work,
+but they are not currently treated as a first-class support target.
 
 ### 1) System dependencies
 ```bash
@@ -163,18 +169,28 @@ cargo build --release --workspace
 ls -1 target/release/aadk-*
 ```
 
-Optional packaging for a GitHub release asset:
+Primary GitHub Releases artifact:
 ```bash
 VERSION=0.1.0
 OUT=dist/aadk-${VERSION}-linux-aarch64
 mkdir -p "${OUT}"
 cp target/release/aadk-{core,workflow,toolchain,project,build,targets,observe,ui,cli} "${OUT}/"
-cp scripts/dev/run-all.sh README.md LICENSE "${OUT}/"
+cp scripts/release/aadk-start.sh "${OUT}/aadk-start.sh"
+cp README.md LICENSE "${OUT}/"
 tar -C dist -czf "aadk-${VERSION}-linux-aarch64.tar.gz" "aadk-${VERSION}-linux-aarch64"
 sha256sum "aadk-${VERSION}-linux-aarch64.tar.gz" > "aadk-${VERSION}-linux-aarch64.tar.gz.sha256"
 ```
 
-See `docs/release.md` and `scripts/release/build.sh` for a scripted flow.
+Upload `aadk-${VERSION}-linux-aarch64.tar.gz` and its `.sha256` file to a GitHub Release.
+GitHub Packages is not used for native AADK desktop binaries.
+
+Optional Debian convenience package:
+```bash
+VERSION=0.1.0 scripts/release/build-deb.sh
+```
+
+See `docs/release.md`, `scripts/release/build.sh`, and `scripts/release/build-deb.sh` for the
+scripted flows.
 
 ## What is implemented today
 
@@ -281,7 +297,8 @@ Prerequisites (per Android Cuttlefish docs):
 - KVM virtualization is required. Check `/dev/kvm` (or `find /dev -name kvm` on ARM64); enable nested virtualization on cloud hosts.
 - Ensure the user is in `kvm`, `cvdnetwork`, and `render` groups; re-login or reboot after group changes.
 - Host tools and images should come from the same build id (Install Cuttlefish enforces this).
-- Debian/Ubuntu hosts install Cuttlefish host tools from the android-cuttlefish apt repo by default; other distros require `AADK_CUTTLEFISH_INSTALL_CMD`.
+- Debian 13 is the validated host path for the default android-cuttlefish apt install; other
+  distros require `AADK_CUTTLEFISH_INSTALL_CMD` and are currently experimental.
 
 Defaults (when not overridden):
 - Branch: `aosp-android-latest-release` for 4K hosts; `main-16k-with-phones` for 16K.
@@ -357,7 +374,7 @@ Configuration (env vars):
 - `AADK_CUTTLEFISH_TAP_MODE=auto|enabled|disabled` to control TAP probing behavior (`auto` default)
 - `AADK_CUTTLEFISH_ENABLE_TAP=1|0` legacy alias for enabling/disabling TAP mode
 - `AADK_CUTTLEFISH_STOP_CMD="..."` to override the stop command
-- `AADK_CUTTLEFISH_INSTALL_CMD="..."` to override the host install command (required on non-Debian hosts)
+- `AADK_CUTTLEFISH_INSTALL_CMD="..."` to override the host install command (required on non-Debian hosts; non-Debian full-stack support is experimental)
 - `AADK_CUTTLEFISH_INSTALL_HOST=0` to skip host package installation
 - `AADK_CUTTLEFISH_INSTALL_IMAGES=0` to skip image downloads
 - `AADK_CUTTLEFISH_ADD_GROUPS=0` to skip adding the user to kvm/cvdnetwork/render

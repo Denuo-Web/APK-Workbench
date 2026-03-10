@@ -8,11 +8,17 @@ streams events to clients while long-running jobs execute in other services.
 
 ## Supported host
 - Linux ARM64 (aarch64) is the only supported host for running the full stack (services/UI/Cuttlefish).
+- Debian 13 on Linux ARM64 is the primary validated distro for full-stack support, release smoke
+  tests, and default Cuttlefish host-tool automation.
+- Non-Debian Linux ARM64 hosts are experimental for the full stack and generally require explicit
+  overrides such as AADK_CUTTLEFISH_INSTALL_CMD.
 - x86_64 is intentionally out of scope because Android Studio already covers it.
 - Toolchain catalog includes Linux ARM64 SDK/NDK artifacts plus Windows ARM64 NDK artifacts (r29/r28c/r27d);
   no darwin SDK/NDK artifacts are published in the custom catalogs.
 - Cuttlefish install uses AADK_CUTTLEFISH_INSTALL_CMD when set; Debian-like hosts fall back to the
   android-cuttlefish apt repo install command.
+- GitHub Releases is the canonical binary distribution channel (`linux-aarch64.tar.gz` plus checksums);
+  the Debian `.deb` is an additional convenience artifact, and GitHub Packages is not used for native binaries.
 
 ## Maintenance
 Keep this file and the per-service AGENTS.md files in sync with code changes. When Codex changes
@@ -34,8 +40,8 @@ completed items or move them into the implementation notes.
 - crates/aadk-proto: Rust gRPC codegen for proto/aadk/v1
 - proto/aadk/v1/*.proto: gRPC contracts
 - scripts/dev/run-all.sh: local dev runner for all services (auto-exports ANDROID_SDK_ROOT/ANDROID_HOME and AADK_ADB_PATH when an SDK is detected)
-- scripts/release/build.sh: release build + packaging helper
-- scripts/release/build-deb.sh: Debian (.deb) package builder (installs UI menu entry + start script)
+- scripts/release/build.sh: release build + GitHub Releases tarball packaging helper
+- scripts/release/build-deb.sh: Debian (.deb) convenience package builder (installs UI menu entry + start script)
 - scripts/release/aadk-start.sh: installed launcher (services + UI, logs to ~/.local/share/aadk/logs)
 - packaging/deb/*: Debian packaging metadata (control, desktop entry, postinst/postrm)
 - assets/aadk.svg: GTK app icon used by the Debian package

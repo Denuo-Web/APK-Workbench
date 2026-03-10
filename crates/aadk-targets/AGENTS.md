@@ -26,7 +26,8 @@ Update this file whenever TargetService behavior changes or when commits touchin
   and reconciled against live discovery when possible.
 - APK install/launch/stop and logcat are implemented via adb commands.
 - Cuttlefish install uses AADK_CUTTLEFISH_INSTALL_CMD when set; otherwise Debian-like hosts use the
-  android-cuttlefish apt repo install command. Other distros require a custom install command.
+  android-cuttlefish apt repo install command. Debian 13 ARM64 is the validated path for that
+  automation; other distros require a custom install command and are currently experimental.
   Per-request branch/target/build_id overrides are supported via ResolveCuttlefishBuild.
 - Cuttlefish operations run external commands and report state via JobService events.
 - GetCuttlefishStatus now combines `cvd status` with ADB state fallback (including `adb devices -l`
@@ -125,7 +126,7 @@ Update this file whenever TargetService behavior changes or when commits touchin
 - AADK_CUTTLEFISH_RESET_CMD
 - AADK_CUTTLEFISH_START_CMD_TIMEOUT_SECS (default 120)
 - AADK_CUTTLEFISH_STOP_CMD_TIMEOUT_SECS (default 60)
-- AADK_CUTTLEFISH_INSTALL_CMD (optional override; required on non-Debian hosts)
+- AADK_CUTTLEFISH_INSTALL_CMD (optional override; required on non-Debian hosts, where full-stack support is experimental)
 - AADK_CUTTLEFISH_INSTALL_HOST=0
 - AADK_CUTTLEFISH_INSTALL_IMAGES=0
 - AADK_CUTTLEFISH_ADD_GROUPS=0

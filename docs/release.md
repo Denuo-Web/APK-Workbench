@@ -1,7 +1,13 @@
 # Release builds (Linux aarch64)
 
-AADK services and the GTK UI are only supported on Linux aarch64. This guide
-captures the release build steps for GitHub assets.
+AADK services and the GTK UI are only supported on Linux aarch64. Debian 13 is
+the primary validated distro for full-stack smoke tests and the optional `.deb`
+package flow.
+
+Use GitHub Releases as the canonical binary distribution channel:
+- Primary artifact: `aadk-${VERSION}-linux-aarch64.tar.gz`
+- Required companion checksum: `aadk-${VERSION}-linux-aarch64.tar.gz.sha256`
+- Optional extra artifact: `aadk_${VERSION}_arm64.deb`
 
 ## Build all binaries
 ```bash
@@ -26,6 +32,10 @@ From the extracted folder, run:
 ./aadk-start.sh
 ```
 
+Upload these files to a GitHub Release:
+- `dist/aadk-${VERSION}-linux-aarch64.tar.gz`
+- `dist/aadk-${VERSION}-linux-aarch64.tar.gz.sha256`
+
 ## Scripted release build
 ```bash
 scripts/release/build.sh
@@ -37,7 +47,11 @@ VERSION=0.1.0 scripts/release/build.sh
 ```
 
 ## Debian package (.deb)
-Requires `dpkg-deb` (from `dpkg-dev`) on a Debian-like ARM64 host (e.g. Raspberry Pi OS 64-bit).
+This is an additional convenience artifact for Debian-like ARM64 hosts. The
+validated path is Debian 13 ARM64.
+
+Requires `dpkg-deb` (from `dpkg-dev`) on a Debian-like ARM64 host (for example,
+Debian 13 or Raspberry Pi OS 64-bit).
 
 ```bash
 VERSION=0.1.0 scripts/release/build-deb.sh
@@ -46,6 +60,9 @@ VERSION=0.1.0 scripts/release/build-deb.sh
 Artifacts:
 - `dist/aadk_${VERSION}_arm64.deb`
 - `dist/aadk_${VERSION}_arm64.deb.sha256`
+
+If you build it, attach both files to the same GitHub Release as optional
+Debian-specific downloads.
 
 Install:
 ```bash
