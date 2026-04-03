@@ -20,7 +20,7 @@ streams events to clients while long-running jobs execute in other services.
 - GitHub Releases is the canonical binary distribution channel (`linux-aarch64.tar.gz` plus checksums);
   the Debian `.deb` is an additional convenience artifact, and GitHub Packages is not used for native binaries.
 - Release packaging scripts default `VERSION` from workspace metadata, share a single binary list via
-  `scripts/release/common.sh`, and enforce Linux ARM64 host checks unless
+  `scripts/release/common.sh`, share Java runtime policy via `scripts/release/aadk-env.sh`, and enforce Linux ARM64 host checks unless
   `AADK_ALLOW_UNSUPPORTED_RELEASE_HOST=1` is set for explicit experimental packaging.
 
 ## Maintenance
@@ -42,10 +42,11 @@ completed items or move them into the implementation notes.
 - crates/aadk-telemetry: Opt-in telemetry spooler (usage events + crash reports)
 - crates/aadk-proto: Rust gRPC codegen for proto/aadk/v1
 - proto/aadk/v1/*.proto: gRPC contracts
-- scripts/dev/run-all.sh: local dev runner for all services (auto-exports ANDROID_SDK_ROOT/ANDROID_HOME and AADK_ADB_PATH when an SDK is detected)
+- scripts/dev/run-all.sh: local dev runner for all services (uses the shared launcher env helper to auto-export ANDROID_SDK_ROOT/ANDROID_HOME and AADK_ADB_PATH when an SDK is detected)
 - scripts/release/common.sh: shared release metadata/helpers (workspace version, supported-host guards, binary list)
+- scripts/release/aadk-env.sh: shared Android/Java environment detection for the dev runner and installed launcher
 - scripts/release/build.sh: release build + GitHub Releases tarball packaging helper
-- scripts/release/build-deb.sh: Debian (.deb) convenience package builder (installs UI menu entry + start script)
+- scripts/release/build-deb.sh: Debian (.deb) convenience package builder (templates package metadata/docs and installs the launcher helper)
 - scripts/release/aadk-start.sh: installed launcher (services + UI, logs to ~/.local/share/aadk/logs)
 - packaging/deb/*: Debian packaging metadata (control, desktop entry, postinst/postrm)
 - assets/aadk.svg: GTK app icon used by the Debian package
@@ -96,6 +97,12 @@ Default addresses (override with env vars):
 - ToolchainService catalog pins SDK 36.0.0/35.0.2 and NDK r29/r28c/r27d/r26d; Linux ARM64 artifacts use
   linux-aarch64/aarch64-linux-android/aarch64_be-linux-musl, and Windows ARM64 NDK artifacts are included
   for r29/r28c/r27d (.7z).
+- ToolchainService ListAvailable now merges the pinned catalog with cached upstream GitHub release
+  discovery for the custom SDK/NDK providers, and CheckUpstreamReleases reports whether the local
+  catalog lags the latest upstream host-compatible release.
+- ToolchainService install/update/verify can use upstream-only releases when GitHub release metadata
+  exposes a matching asset URL plus sha256 digest, so new upstream SDK/NDK versions do not require
+  an immediate catalog edit before they can be discovered or installed.
 - ObserveService persists run history and a run output inventory; run records include a summary pointer for output counts and last bundle.
 - RunId is a first-class identifier for multi-service workflows; correlation_id remains a secondary grouping key.
 - JobService StreamRunEvents aggregates run events across jobs using bounded buffering and best-effort timestamp ordering for late discovery.
