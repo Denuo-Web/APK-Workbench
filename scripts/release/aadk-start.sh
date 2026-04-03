@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/release/aadk-env.sh
 source "${SCRIPT_DIR}/aadk-env.sh"
 
-DEFAULT_BIN_DIR="/opt/aadk/bin"
+DEFAULT_BIN_DIR="/usr/lib/aadk/bin"
 BIN_DIR="${AADK_BIN_DIR:-$DEFAULT_BIN_DIR}"
 if [ -z "${AADK_BIN_DIR:-}" ] && [ -x "$SCRIPT_DIR/aadk-core" ]; then
   BIN_DIR="$SCRIPT_DIR"

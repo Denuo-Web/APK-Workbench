@@ -22,6 +22,8 @@ streams events to clients while long-running jobs execute in other services.
 - Release packaging scripts default `VERSION` from workspace metadata, share a single binary list via
   `scripts/release/common.sh`, share Java runtime policy via `scripts/release/aadk-env.sh`, and enforce Linux ARM64 host checks unless
   `AADK_ALLOW_UNSUPPORTED_RELEASE_HOST=1` is set for explicit experimental packaging.
+- Debian packages install the launcher and binaries under `/usr/lib/aadk`, expose `/usr/bin/{aadk,aadk-ui,aadk-cli}` symlinks,
+  ship minimal manpages for those commands, validate `PKGNAME` before packaging, and strip staged binaries during packaging.
 
 ## Maintenance
 Keep this file and the per-service AGENTS.md files in sync with code changes. When Codex changes
@@ -48,7 +50,7 @@ completed items or move them into the implementation notes.
 - scripts/release/build.sh: release build + GitHub Releases tarball packaging helper
 - scripts/release/build-deb.sh: Debian (.deb) convenience package builder (templates package metadata/docs and installs the launcher helper)
 - scripts/release/aadk-start.sh: installed launcher (services + UI, logs to ~/.local/share/aadk/logs)
-- packaging/deb/*: Debian packaging metadata (control, desktop entry, postinst/postrm)
+- packaging/deb/*: Debian packaging metadata (control, desktop entry, postinst/postrm, manpages)
 - assets/aadk.svg: GTK app icon used by the Debian package
 - docs/release.md: release build steps
 - SampleConsole: Minimal Compose sample app (Sample Console) bundled with AADK

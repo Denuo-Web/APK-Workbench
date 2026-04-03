@@ -15,12 +15,16 @@ DEB_SUMMARY="${DEB_SUMMARY:-$AADK_RELEASE_DEB_SUMMARY}"
 JAVA_RUNTIME_RECOMMENDS="${JAVA_RUNTIME_RECOMMENDS:-$(aadk_supported_java_jre_recommends)}"
 CHANGELOG_DATE="${CHANGELOG_DATE:-$(aadk_release_rfc2822_date)}"
 
+aadk_release_validate_deb_pkgname "${PKGNAME}"
+
 ROOT="dist/deb/${PKGNAME}_${VERSION}_${ARCH}"
-INSTALL_ROOT="$ROOT/opt/aadk-${VERSION}"
+INSTALL_ROOT="$ROOT${AADK_RELEASE_DEB_LIBDIR}"
+BIN_SYMLINK_ROOT="../${AADK_RELEASE_DEB_LIBDIR#/usr/}/bin"
 BIN_DIR="$INSTALL_ROOT/bin"
 DOC_DIR="$ROOT/usr/share/doc/${PKGNAME}"
 APP_DIR="$ROOT/usr/share/applications"
 ICON_DIR="$ROOT/usr/share/icons/hicolor/scalable/apps"
+MAN_DIR="$ROOT/usr/share/man/man1"
 DEBIAN_DIR="$ROOT/DEBIAN"
 OUTPUT="dist/${PKGNAME}_${VERSION}_${ARCH}.deb"
 
@@ -62,13 +66,20 @@ if [ ! -f "assets/aadk.svg" ]; then
   exit 1
 fi
 
+for manpage in aadk aadk-ui aadk-cli; do
+  if [ ! -f "packaging/deb/man/${manpage}.1" ]; then
+    echo "ERROR: missing packaging/deb/man/${manpage}.1" >&2
+    exit 1
+  fi
+done
+
 mkdir -p dist
 
 aadk_release_build_workspace
 aadk_release_print_binaries
 
 rm -rf "$ROOT"
-install -d "$BIN_DIR" "$DOC_DIR" "$APP_DIR" "$ICON_DIR" "$DEBIAN_DIR" "$ROOT/usr/bin" "$ROOT/opt"
+install -d "$BIN_DIR" "$DOC_DIR" "$APP_DIR" "$ICON_DIR" "$MAN_DIR" "$DEBIAN_DIR" "$ROOT/usr/bin" "$ROOT/usr/lib"
 
 aadk_release_install_binaries "$BIN_DIR"
 aadk_release_install_launcher "$BIN_DIR" "aadk-start"
@@ -77,11 +88,14 @@ aadk_release_install_docs "$DOC_DIR"
 install -m 644 LICENSE "$DOC_DIR/copyright"
 install -m 644 packaging/deb/aadk.desktop "$APP_DIR/aadk.desktop"
 install -m 644 assets/aadk.svg "$ICON_DIR/aadk.svg"
+for manpage in aadk aadk-ui aadk-cli; do
+  gzip -9nc "packaging/deb/man/${manpage}.1" > "$MAN_DIR/${manpage}.1.gz"
+  chmod 644 "$MAN_DIR/${manpage}.1.gz"
+done
 
-ln -s "aadk-${VERSION}" "$ROOT/opt/aadk"
-ln -s /opt/aadk/bin/aadk-start "$ROOT/usr/bin/aadk"
-ln -s /opt/aadk/bin/aadk-ui "$ROOT/usr/bin/aadk-ui"
-ln -s /opt/aadk/bin/aadk-cli "$ROOT/usr/bin/aadk-cli"
+ln -s "${BIN_SYMLINK_ROOT}/aadk-start" "$ROOT/usr/bin/aadk"
+ln -s "${BIN_SYMLINK_ROOT}/aadk-ui" "$ROOT/usr/bin/aadk-ui"
+ln -s "${BIN_SYMLINK_ROOT}/aadk-cli" "$ROOT/usr/bin/aadk-cli"
 
 pkgname_escaped="$(aadk_release_escape_sed_replacement "$PKGNAME")"
 version_escaped="$(aadk_release_escape_sed_replacement "$VERSION")"

@@ -1,0 +1,29 @@
+.TH AADK 1 "April 2026" "AADK" "User Commands"
+.SH NAME
+aadk \- start the AADK services and GTK interface
+.SH SYNOPSIS
+.B aadk
+[\fB--services\fR]
+[\fIui-args\fR...]
+.SH DESCRIPTION
+.B aadk
+starts the AADK background services and, by default, launches the GTK4 user
+interface.
+.PP
+The command is the packaged entry point for the Debian build and resolves to
+the installed launcher under
+.IR /usr/lib/aadk/bin/aadk-start .
+.SH OPTIONS
+.TP
+.B --services
+Start the gRPC services without launching the GTK UI.
+.TP
+.BR -h ", " --help
+Show the launcher help text and exit.
+.SH FILES
+.TP
+.I ~/.local/share/aadk/logs
+Runtime logs written by the launcher and packaged services.
+.SH SEE ALSO
+.BR aadk-ui (1),
+.BR aadk-cli (1)

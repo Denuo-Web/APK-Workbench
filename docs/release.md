@@ -55,8 +55,9 @@ Debian 13 or Raspberry Pi OS 64-bit).
 `scripts/release/build-deb.sh` shares the same workspace-version default and
 binary list as the tarball builder, templates `PKGNAME` through the Debian
 control metadata, and derives Java runtime recommendations from the shared
-launcher environment policy. It also validates Linux ARM64 and checks that the
-Debian architecture matches `ARCH` (default `arm64`) unless
+launcher environment policy. It validates `PKGNAME` before packaging, strips
+packaged binaries during staging, and checks that the Debian architecture
+matches `ARCH` (default `arm64`) unless
 `AADK_ALLOW_UNSUPPORTED_RELEASE_HOST=1`.
 
 ```bash
@@ -91,6 +92,11 @@ sudo apt install ./dist/aadk_${VERSION}_arm64.deb
 Menu entry:
 - Appears under `Development` as `AADK`.
 - Runs `aadk` (services + GTK UI). Logs go to `~/.local/share/aadk/logs`.
+
+Installed layout:
+- Versionless package payload lives under `/usr/lib/aadk`.
+- `/usr/bin/aadk`, `/usr/bin/aadk-ui`, and `/usr/bin/aadk-cli` are symlinked entry points.
+- Minimal manpages are installed for `aadk(1)`, `aadk-ui(1)`, and `aadk-cli(1)`.
 
 Uninstall:
 ```bash

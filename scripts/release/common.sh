@@ -9,6 +9,7 @@ source "${AADK_RELEASE_SCRIPT_DIR}/aadk-env.sh"
 AADK_RELEASE_DEFAULT_PKGNAME="aadk"
 AADK_RELEASE_DEB_MAINTAINER="${AADK_RELEASE_DEB_MAINTAINER:-Jaron Rosenau <jaron@rosenau.info>}"
 AADK_RELEASE_DEB_SUMMARY="${AADK_RELEASE_DEB_SUMMARY:-Android DevKit workflow suite}"
+AADK_RELEASE_DEB_LIBDIR="/usr/lib/aadk"
 
 aadk_release_binaries=(
   aadk-core
@@ -47,6 +48,26 @@ aadk_workspace_version() {
 
 aadk_release_default_pkgname() {
   printf '%s\n' "$AADK_RELEASE_DEFAULT_PKGNAME"
+}
+
+aadk_release_validate_deb_pkgname() {
+  local pkgname="$1"
+
+  if ! command -v dpkg >/dev/null 2>&1; then
+    echo "ERROR: dpkg not found. Install dpkg before building Debian packages." >&2
+    exit 1
+  fi
+
+  if ! dpkg --validate-pkgname "$pkgname" >/dev/null 2>&1; then
+    echo "ERROR: invalid Debian package name: ${pkgname}" >&2
+    exit 1
+  fi
+
+  if ! printf '%s\n' "$pkgname" | grep -Eq '^[a-z0-9][a-z0-9.+-]*$'; then
+    echo "ERROR: invalid Debian package name: ${pkgname}" >&2
+    echo "Use lowercase letters, digits, '+', '-', or '.', and start with a letter or digit." >&2
+    exit 1
+  fi
 }
 
 aadk_release_escape_sed_replacement() {
@@ -133,7 +154,7 @@ aadk_release_install_binaries() {
       echo "ERROR: missing built binary target/release/${bin}" >&2
       exit 1
     fi
-    install -m 755 "${AADK_RELEASE_ROOT}/target/release/${bin}" "${dest_dir}/${bin}"
+    install -m 755 -s "${AADK_RELEASE_ROOT}/target/release/${bin}" "${dest_dir}/${bin}"
   done
 }
 
