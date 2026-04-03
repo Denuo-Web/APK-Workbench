@@ -8,7 +8,7 @@ use reqwest::Client;
 use serde::Deserialize;
 
 use crate::artifacts::{is_remote_url, local_artifact_path};
-use crate::catalog::{catalog_artifact_for_provenance, Catalog, CatalogArtifact};
+use crate::catalog::CatalogArtifact;
 use crate::hashing::sha256_file_bytes;
 use crate::provenance::Provenance;
 use crate::state::{
@@ -159,7 +159,7 @@ pub(crate) async fn verify_signature_if_configured(
 pub(crate) fn verify_provenance_entry(
     entry: &InstalledToolchain,
     prov: &Provenance,
-    catalog: &Catalog,
+    known_artifact: Option<&CatalogArtifact>,
 ) -> Result<(), String> {
     if prov.provider_id.trim().is_empty() {
         return Err("provenance missing provider_id".into());
@@ -211,23 +211,18 @@ pub(crate) fn verify_provenance_entry(
     }
 
     if is_remote_url(&prov.source_url) {
-        let artifact = catalog_artifact_for_provenance(
-            catalog,
-            &entry_provider_id,
-            &entry_version,
-            &prov.source_url,
-            &prov.sha256,
-        )
-        .ok_or_else(|| "provenance source_url not found in catalog".to_string())?;
+        let artifact = known_artifact.ok_or_else(|| {
+            "provenance source_url not found in catalog or upstream release metadata".to_string()
+        })?;
         if !artifact.sha256.is_empty() && !prov.sha256.is_empty() && artifact.sha256 != prov.sha256
         {
-            return Err("catalog sha256 mismatch".into());
+            return Err("known artifact sha256 mismatch".into());
         }
         if prov.artifact_size_bytes > 0
             && artifact.size_bytes > 0
             && prov.artifact_size_bytes != artifact.size_bytes
         {
-            return Err("catalog size_bytes mismatch".into());
+            return Err("known artifact size_bytes mismatch".into());
         }
     }
 

@@ -11,19 +11,19 @@ use aadk_proto::aadk::v1::{
     project_service_client::ProjectServiceClient, target_service_client::TargetServiceClient,
     toolchain_service_client::ToolchainServiceClient,
     workflow_service_client::WorkflowServiceClient, Artifact, ArtifactType, BuildRequest,
-    CancelJobRequest, CleanupToolchainCacheRequest, CreateProjectRequest,
-    CreateToolchainSetRequest, ExportEvidenceBundleRequest, ExportSupportBundleRequest,
-    GetActiveToolchainSetRequest, GetCuttlefishStatusRequest, GetDefaultTargetRequest,
-    GetJobRequest, Id, InstallApkRequest, InstallCuttlefishRequest, InstallToolchainRequest,
-    InstalledToolchain, Job, JobEvent, JobEventKind, JobFilter, JobHistoryFilter, JobState,
-    KeyValue, LaunchRequest, ListArtifactsRequest, ListAvailableRequest, ListInstalledRequest,
-    ListJobHistoryRequest, ListJobsRequest, ListProvidersRequest, ListRecentProjectsRequest,
-    ListRunOutputsRequest, ListRunsRequest, ListTargetsRequest, ListTemplatesRequest,
-    ListToolchainSetsRequest, OpenProjectRequest, Pagination, ReloadStateRequest,
-    ResolveCuttlefishBuildRequest, RunFilter, RunId, RunOutputFilter, RunOutputKind,
-    SetActiveToolchainSetRequest, SetDefaultTargetRequest, SetProjectConfigRequest,
-    StartCuttlefishRequest, StartJobRequest, StopCuttlefishRequest, StreamJobEventsRequest,
-    StreamLogcatRequest, StreamRunEventsRequest, Timestamp, ToolchainKind,
+    CancelJobRequest, CheckUpstreamReleasesRequest, CleanupToolchainCacheRequest,
+    CreateProjectRequest, CreateToolchainSetRequest, ExportEvidenceBundleRequest,
+    ExportSupportBundleRequest, GetActiveToolchainSetRequest, GetCuttlefishStatusRequest,
+    GetDefaultTargetRequest, GetJobRequest, Id, InstallApkRequest, InstallCuttlefishRequest,
+    InstallToolchainRequest, InstalledToolchain, Job, JobEvent, JobEventKind, JobFilter,
+    JobHistoryFilter, JobState, KeyValue, LaunchRequest, ListArtifactsRequest,
+    ListAvailableRequest, ListInstalledRequest, ListJobHistoryRequest, ListJobsRequest,
+    ListProvidersRequest, ListRecentProjectsRequest, ListRunOutputsRequest, ListRunsRequest,
+    ListTargetsRequest, ListTemplatesRequest, ListToolchainSetsRequest, OpenProjectRequest,
+    Pagination, ReloadStateRequest, ResolveCuttlefishBuildRequest, RunFilter, RunId,
+    RunOutputFilter, RunOutputKind, SetActiveToolchainSetRequest, SetDefaultTargetRequest,
+    SetProjectConfigRequest, StartCuttlefishRequest, StartJobRequest, StopCuttlefishRequest,
+    StreamJobEventsRequest, StreamLogcatRequest, StreamRunEventsRequest, Timestamp, ToolchainKind,
     UninstallToolchainRequest, UpdateToolchainRequest, VerifyToolchainRequest,
     WorkflowPipelineRequest,
 };
@@ -38,6 +38,7 @@ use tonic::transport::Channel;
 use crate::commands::{AppEvent, UiCommand};
 use crate::config::{write_json_atomic, AppConfig};
 use crate::models::{ProjectTemplateOption, TargetOption, ToolchainSetOption};
+use crate::pages::{PROVIDER_NDK_ID, PROVIDER_SDK_ID};
 use crate::ui_events::UiEventSender;
 use crate::utils::{infer_application_id_from_apk_path, parse_list_tokens};
 
@@ -1286,6 +1287,16 @@ pub(crate) async fn handle_command(
                         .as_ref()
                         .map(|v| v.version.as_str())
                         .unwrap_or("unknown");
+                    let channel = item
+                        .version
+                        .as_ref()
+                        .map(|v| v.channel.as_str())
+                        .unwrap_or("");
+                    let notes = item
+                        .version
+                        .as_ref()
+                        .map(|v| v.notes.as_str())
+                        .unwrap_or("");
                     let url = item.artifact.as_ref().map(|a| a.url.as_str()).unwrap_or("");
                     let sha = item
                         .artifact
@@ -1293,7 +1304,132 @@ pub(crate) async fn handle_command(
                         .map(|a| a.sha256.as_str())
                         .unwrap_or("");
                     let size = item.artifact.as_ref().map(|a| a.size_bytes).unwrap_or(0);
-                    ui.send(AppEvent::Log { page: "toolchains", line: format!("- {name} {version}\n  url={url}\n  sha256={sha}\n  size_bytes={size}\n") }).ok();
+                    let mut line = format!("- {name} {version}");
+                    if !channel.is_empty() {
+                        line.push_str(&format!(" channel={channel}"));
+                    }
+                    line.push('\n');
+                    line.push_str(&format!(
+                        "  url={url}\n  sha256={sha}\n  size_bytes={size}\n"
+                    ));
+                    if !notes.trim().is_empty() {
+                        line.push_str(&format!("  notes={notes}\n"));
+                    }
+                    ui.send(AppEvent::Log {
+                        page: "toolchains",
+                        line,
+                    })
+                    .ok();
+                }
+            }
+        }
+
+        UiCommand::ToolchainCheckUpstream { cfg } => {
+            ui.send(AppEvent::Log {
+                page: "toolchains",
+                line: format!("Checking upstream releases via {}\n", cfg.toolchain_addr),
+            })
+            .ok();
+            let mut client = ToolchainServiceClient::new(connect(&cfg.toolchain_addr).await?);
+            for (provider_id, label) in [(PROVIDER_SDK_ID, "SDK"), (PROVIDER_NDK_ID, "NDK")] {
+                match client
+                    .check_upstream_releases(CheckUpstreamReleasesRequest {
+                        provider_id: Some(Id {
+                            value: provider_id.to_string(),
+                        }),
+                    })
+                    .await
+                {
+                    Ok(resp) => {
+                        let resp = resp.into_inner();
+                        let latest_catalog = if resp.latest_catalog_version.trim().is_empty() {
+                            "(none)"
+                        } else {
+                            resp.latest_catalog_version.as_str()
+                        };
+                        let latest_upstream = if resp.latest_upstream_version.trim().is_empty() {
+                            "(none)"
+                        } else {
+                            resp.latest_upstream_version.as_str()
+                        };
+                        ui.send(AppEvent::Log {
+                            page: "toolchains",
+                            line: format!(
+                                "{label}: catalog_latest={latest_catalog} upstream_latest={latest_upstream} outdated={}\n",
+                                resp.catalog_outdated
+                            ),
+                        })
+                        .ok();
+                        if resp.releases.is_empty() {
+                            ui.send(AppEvent::Log {
+                                page: "toolchains",
+                                line: format!(
+                                    "{label}: no upstream releases found for this host.\n"
+                                ),
+                            })
+                            .ok();
+                        } else {
+                            for release in &resp.releases {
+                                let version = release
+                                    .version
+                                    .as_ref()
+                                    .map(|value| value.version.as_str())
+                                    .unwrap_or("unknown");
+                                let status = if release.in_catalog { "pinned" } else { "new" };
+                                let published_at = if release.published_at.trim().is_empty() {
+                                    "unknown"
+                                } else {
+                                    release.published_at.as_str()
+                                };
+                                ui.send(AppEvent::Log {
+                                    page: "toolchains",
+                                    line: format!(
+                                        "  - {version} [{status}] published={published_at}\n    release={}\n",
+                                        release.release_url
+                                    ),
+                                })
+                                .ok();
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        ui.send(AppEvent::Log {
+                            page: "toolchains",
+                            line: format!("{label}: upstream check failed: {err}\n"),
+                        })
+                        .ok();
+                    }
+                }
+
+                match client
+                    .list_available(ListAvailableRequest {
+                        provider_id: Some(Id {
+                            value: provider_id.to_string(),
+                        }),
+                        page: None,
+                    })
+                    .await
+                {
+                    Ok(resp) => {
+                        let versions = resp
+                            .into_inner()
+                            .items
+                            .iter()
+                            .filter_map(|item| item.version.as_ref().map(|v| v.version.clone()))
+                            .collect::<Vec<_>>();
+                        ui.send(AppEvent::ToolchainAvailable {
+                            provider_id: provider_id.to_string(),
+                            versions,
+                        })
+                        .ok();
+                    }
+                    Err(err) => {
+                        ui.send(AppEvent::Log {
+                            page: "toolchains",
+                            line: format!("{label}: refresh available versions failed: {err}\n"),
+                        })
+                        .ok();
+                    }
                 }
             }
         }

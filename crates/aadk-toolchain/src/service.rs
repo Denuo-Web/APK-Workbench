@@ -1,20 +1,24 @@
 use std::{
+    collections::{HashMap, HashSet},
     fs, io,
     path::{Path, PathBuf},
     sync::Arc,
+    time::{Duration, Instant},
 };
 
 use aadk_proto::aadk::v1::{
-    toolchain_service_server::ToolchainService, CleanupToolchainCacheRequest,
-    CleanupToolchainCacheResponse, CreateToolchainSetRequest, CreateToolchainSetResponse,
-    ErrorCode, ErrorDetail, GetActiveToolchainSetRequest, GetActiveToolchainSetResponse, Id,
-    InstallToolchainRequest, InstallToolchainResponse, InstalledToolchain, JobState, KeyValue,
-    ListAvailableRequest, ListAvailableResponse, ListInstalledRequest, ListInstalledResponse,
-    ListProvidersRequest, ListProvidersResponse, ListToolchainSetsRequest,
-    ListToolchainSetsResponse, PageInfo, ReloadStateRequest, ReloadStateResponse,
-    SetActiveToolchainSetRequest, SetActiveToolchainSetResponse, ToolchainArtifact, ToolchainKind,
-    ToolchainSet, UninstallToolchainRequest, UninstallToolchainResponse, UpdateToolchainRequest,
-    UpdateToolchainResponse, VerifyToolchainRequest, VerifyToolchainResponse,
+    toolchain_service_server::ToolchainService, AvailableToolchain, CheckUpstreamReleasesRequest,
+    CheckUpstreamReleasesResponse, CleanupToolchainCacheRequest, CleanupToolchainCacheResponse,
+    CreateToolchainSetRequest, CreateToolchainSetResponse, ErrorCode, ErrorDetail,
+    GetActiveToolchainSetRequest, GetActiveToolchainSetResponse, Id, InstallToolchainRequest,
+    InstallToolchainResponse, InstalledToolchain, JobState, KeyValue, ListAvailableRequest,
+    ListAvailableResponse, ListInstalledRequest, ListInstalledResponse, ListProvidersRequest,
+    ListProvidersResponse, ListToolchainSetsRequest, ListToolchainSetsResponse, PageInfo,
+    ReloadStateRequest, ReloadStateResponse, SetActiveToolchainSetRequest,
+    SetActiveToolchainSetResponse, ToolchainArtifact, ToolchainKind, ToolchainSet,
+    UninstallToolchainRequest, UninstallToolchainResponse, UpdateToolchainRequest,
+    UpdateToolchainResponse, UpstreamToolchainRelease, VerifyToolchainRequest,
+    VerifyToolchainResponse,
 };
 use aadk_util::now_ts;
 use tokio::sync::Mutex;
@@ -28,8 +32,9 @@ use crate::artifacts::{
 };
 use crate::cancel::cancel_requested;
 use crate::catalog::{
-    available_for_provider, catalog_artifact_for_provenance, catalog_version_hosts, find_available,
-    fixtures_dir, host_key, load_catalog, provider_from_catalog, Catalog,
+    available_for_provider as catalog_available_for_provider, catalog_artifact_for_provenance,
+    catalog_version_hosts, find_available as catalog_find_available, fixtures_dir, host_key,
+    load_catalog, provider_from_catalog, Catalog, CatalogArtifact,
 };
 use crate::jobs::{
     connect_job, job_error_detail, job_is_cancelled, metric, publish_completed, publish_failed,
@@ -43,6 +48,10 @@ use crate::state::{
     replace_toolchain_in_sets, save_state_best_effort, scrub_toolchain_from_sets,
     toolchain_referenced_by_sets, toolchain_set_id, version_from_installed, State,
 };
+use crate::upstream::{
+    build_release_check, discovered_release_to_available, fetch_repo_releases,
+    matching_release_artifact_any_host, provider_repo, GithubRelease, UpstreamReleaseCheck,
+};
 use crate::verify::{
     normalize_signature_value, signature_record_from_catalog, signature_record_from_provenance,
     transparency_record_from_catalog, transparency_record_from_provenance,
@@ -51,11 +60,19 @@ use crate::verify::{
 };
 
 const DEFAULT_PAGE_SIZE: usize = 25;
+const UPSTREAM_CACHE_TTL: Duration = Duration::from_secs(300);
+
+#[derive(Clone)]
+struct CachedUpstreamReleases {
+    releases: Vec<GithubRelease>,
+    fetched_at: Instant,
+}
 
 #[derive(Clone)]
 pub(crate) struct Svc {
     state: Arc<Mutex<State>>,
     catalog: Arc<Catalog>,
+    upstream_cache: Arc<Mutex<HashMap<String, CachedUpstreamReleases>>>,
 }
 
 impl Default for Svc {
@@ -65,6 +82,7 @@ impl Default for Svc {
         Self {
             state: Arc::new(Mutex::new(state)),
             catalog: Arc::new(catalog),
+            upstream_cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
@@ -139,6 +157,131 @@ fn ensure_cmdline_tools_latest(root: &Path) -> Result<(), String> {
 }
 
 impl Svc {
+    fn provider_exists(&self, provider_id: &str) -> bool {
+        self.catalog
+            .providers
+            .iter()
+            .any(|provider| provider.provider_id == provider_id)
+    }
+
+    async fn fetch_upstream_releases_cached(
+        &self,
+        provider_id: &str,
+    ) -> Result<Vec<GithubRelease>, String> {
+        let provider_id = provider_id.trim();
+        let repo = provider_repo(provider_id).ok_or_else(|| {
+            format!("upstream release checks are not supported for {provider_id}")
+        })?;
+
+        {
+            let cache = self.upstream_cache.lock().await;
+            if let Some(cached) = cache.get(provider_id) {
+                if cached.fetched_at.elapsed() < UPSTREAM_CACHE_TTL {
+                    return Ok(cached.releases.clone());
+                }
+            }
+        }
+
+        let releases = fetch_repo_releases(repo).await?;
+        let mut cache = self.upstream_cache.lock().await;
+        cache.insert(
+            provider_id.to_string(),
+            CachedUpstreamReleases {
+                releases: releases.clone(),
+                fetched_at: Instant::now(),
+            },
+        );
+        Ok(releases)
+    }
+
+    async fn upstream_release_check(
+        &self,
+        provider_id: &str,
+        host: &str,
+    ) -> Result<UpstreamReleaseCheck, String> {
+        let releases = self.fetch_upstream_releases_cached(provider_id).await?;
+        build_release_check(&self.catalog, provider_id, host, &releases)
+    }
+
+    async fn available_for_provider_with_upstream(
+        &self,
+        provider_id: &str,
+        host: &str,
+        fixtures: Option<&Path>,
+    ) -> Vec<AvailableToolchain> {
+        let catalog_items =
+            catalog_available_for_provider(&self.catalog, provider_id, host, fixtures);
+        if fixtures.is_some() {
+            return catalog_items;
+        }
+
+        let check = match self.upstream_release_check(provider_id, host).await {
+            Ok(check) => check,
+            Err(err) => {
+                warn!(
+                    "Failed to fetch upstream releases for {} on {}: {}",
+                    provider_id, host, err
+                );
+                return catalog_items;
+            }
+        };
+
+        let mut items = Vec::new();
+        let mut seen_versions = HashSet::new();
+        for release in &check.releases {
+            seen_versions.insert(release.version.version.clone());
+            items.push(discovered_release_to_available(&check.provider, release));
+        }
+        for item in catalog_items {
+            let version = item
+                .version
+                .as_ref()
+                .map(|value| value.version.clone())
+                .unwrap_or_default();
+            if version.is_empty() || seen_versions.insert(version) {
+                items.push(item);
+            }
+        }
+        items
+    }
+
+    async fn find_available_with_upstream(
+        &self,
+        provider_id: &str,
+        version: &str,
+        host: &str,
+        fixtures: Option<&Path>,
+    ) -> Option<AvailableToolchain> {
+        if let Some(item) =
+            catalog_find_available(&self.catalog, provider_id, version, host, fixtures)
+        {
+            return Some(item);
+        }
+        self.available_for_provider_with_upstream(provider_id, host, fixtures)
+            .await
+            .into_iter()
+            .find(|item| item.version.as_ref().map(|v| v.version.as_str()) == Some(version))
+    }
+
+    async fn known_artifact_for_source(
+        &self,
+        provider_id: &str,
+        version: &str,
+        url: &str,
+        sha256: &str,
+    ) -> Option<CatalogArtifact> {
+        if let Some(artifact) =
+            catalog_artifact_for_provenance(&self.catalog, provider_id, version, url, sha256)
+        {
+            return Some(artifact);
+        }
+        let releases = self
+            .fetch_upstream_releases_cached(provider_id)
+            .await
+            .ok()?;
+        matching_release_artifact_any_host(&releases, version, url, sha256)
+    }
+
     #[allow(clippy::too_many_arguments)]
     async fn run_install_job(
         &self,
@@ -172,13 +315,10 @@ impl Svc {
             return Ok(());
         }
 
-        let available = match find_available(
-            &self.catalog,
-            &provider_id,
-            &version,
-            &host,
-            fixtures.as_deref(),
-        ) {
+        let available = match self
+            .find_available_with_upstream(&provider_id, &version, &host, fixtures.as_deref())
+            .await
+        {
             Some(item) => item,
             None => {
                 if fixtures.is_none() {
@@ -252,17 +392,13 @@ impl Svc {
             return Ok(());
         }
 
-        let catalog_artifact = catalog_artifact_for_provenance(
-            &self.catalog,
-            &provider_id,
-            &version,
-            &artifact.url,
-            &artifact.sha256,
-        );
-        let signature_record = catalog_artifact
+        let known_artifact = self
+            .known_artifact_for_source(&provider_id, &version, &artifact.url, &artifact.sha256)
+            .await;
+        let signature_record = known_artifact
             .as_ref()
             .and_then(signature_record_from_catalog);
-        let transparency_record = catalog_artifact
+        let transparency_record = known_artifact
             .as_ref()
             .and_then(transparency_record_from_catalog);
 
@@ -951,13 +1087,10 @@ impl Svc {
             return Ok(());
         }
 
-        let available = match find_available(
-            &self.catalog,
-            &provider_id,
-            &target_version,
-            &host,
-            fixtures.as_deref(),
-        ) {
+        let available = match self
+            .find_available_with_upstream(&provider_id, &target_version, &host, fixtures.as_deref())
+            .await
+        {
             Some(item) => item,
             None => {
                 let err_detail = job_error_detail(
@@ -1002,17 +1135,18 @@ impl Svc {
             return Ok(());
         }
 
-        let catalog_artifact = catalog_artifact_for_provenance(
-            &self.catalog,
-            &provider_id,
-            &target_version,
-            &artifact.url,
-            &artifact.sha256,
-        );
-        let signature_record = catalog_artifact
+        let known_artifact = self
+            .known_artifact_for_source(
+                &provider_id,
+                &target_version,
+                &artifact.url,
+                &artifact.sha256,
+            )
+            .await;
+        let signature_record = known_artifact
             .as_ref()
             .and_then(signature_record_from_catalog);
-        let transparency_record = catalog_artifact
+        let transparency_record = known_artifact
             .as_ref()
             .and_then(transparency_record_from_catalog);
         if !verify_hash && signature_record.is_some() {
@@ -1547,19 +1681,66 @@ impl ToolchainService for Svc {
                 "unsupported host for available toolchains",
             ));
         }
-        if !self
-            .catalog
-            .providers
-            .iter()
-            .any(|provider| provider.provider_id == pid)
-        {
+        if !self.provider_exists(&pid) {
             return Err(Status::not_found(format!("provider_id not found: {pid}")));
         }
+        let items = self
+            .available_for_provider_with_upstream(&pid, &host, fixtures.as_deref())
+            .await;
         Ok(Response::new(ListAvailableResponse {
-            items: available_for_provider(&self.catalog, &pid, &host, fixtures.as_deref()),
+            items,
             page_info: Some(PageInfo {
                 next_page_token: "".into(),
             }),
+        }))
+    }
+
+    async fn check_upstream_releases(
+        &self,
+        request: Request<CheckUpstreamReleasesRequest>,
+    ) -> Result<Response<CheckUpstreamReleasesResponse>, Status> {
+        let req = request.into_inner();
+        let pid = req.provider_id.map(|id| id.value).unwrap_or_default();
+        if pid.trim().is_empty() {
+            return Err(Status::invalid_argument("provider_id is required"));
+        }
+        if !self.provider_exists(&pid) {
+            return Err(Status::not_found(format!("provider_id not found: {pid}")));
+        }
+
+        let host = host_key().unwrap_or_else(|| "unknown".into());
+        if host == "unknown" {
+            return Err(Status::failed_precondition(
+                "unsupported host for upstream release checks",
+            ));
+        }
+
+        let check = self
+            .upstream_release_check(&pid, &host)
+            .await
+            .map_err(Status::unavailable)?;
+        let releases = check
+            .releases
+            .into_iter()
+            .map(|release| UpstreamToolchainRelease {
+                version: Some(release.version),
+                artifact: Some(ToolchainArtifact {
+                    url: release.artifact.url,
+                    sha256: release.artifact.sha256,
+                    size_bytes: release.artifact.size_bytes,
+                }),
+                in_catalog: release.in_catalog,
+                published_at: release.published_at,
+                release_url: release.release_url,
+            })
+            .collect();
+
+        Ok(Response::new(CheckUpstreamReleasesResponse {
+            provider: Some(check.provider),
+            latest_catalog_version: check.latest_catalog_version,
+            latest_upstream_version: check.latest_upstream_version,
+            catalog_outdated: check.catalog_outdated,
+            releases,
         }))
     }
 
@@ -1645,12 +1826,7 @@ impl ToolchainService for Svc {
             return Err(Status::invalid_argument("version is required"));
         };
 
-        if !self
-            .catalog
-            .providers
-            .iter()
-            .any(|provider| provider.provider_id == provider_id)
-        {
+        if !self.provider_exists(&provider_id) {
             return Err(Status::not_found(format!(
                 "provider_id not found: {provider_id}"
             )));
@@ -1915,6 +2091,7 @@ impl ToolchainService for Svc {
                 return Ok(Response::new(resp));
             }
         };
+        let entry_snapshot = entry.clone();
 
         let _ = publish_progress(
             &mut job_client,
@@ -1923,7 +2100,7 @@ impl ToolchainService for Svc {
             "loading provenance",
             vec![
                 metric("toolchain_id", &id),
-                metric("install_path", &entry.install_path),
+                metric("install_path", &entry_snapshot.install_path),
                 metric("provenance_path", prov_path.display()),
                 metric("provider_id", &provenance.provider_id),
                 metric("version", &provenance.version),
@@ -1931,36 +2108,15 @@ impl ToolchainService for Svc {
         )
         .await;
 
-        if let Err(err) = verify_provenance_entry(entry, &provenance, &self.catalog) {
-            entry.verified = false;
-            let err_detail = job_error_detail(
-                ErrorCode::ToolchainVerifyFailed,
-                "provenance validation failed",
-                err,
-                &job_id,
-            );
-            let resp = VerifyToolchainResponse {
-                verified: false,
-                error: Some(err_detail),
-                job_id: Some(Id {
-                    value: job_id.clone(),
-                }),
-            };
-            save_state_best_effort(&st);
-            drop(st);
-            let _ = publish_failed(&mut job_client, &job_id, resp.error.clone().unwrap()).await;
-            return Ok(Response::new(resp));
-        }
-
-        let source_url = if entry.source_url.trim().is_empty() {
+        let source_url = if entry_snapshot.source_url.trim().is_empty() {
             provenance.source_url.clone()
         } else {
-            entry.source_url.clone()
+            entry_snapshot.source_url.clone()
         };
-        let sha256 = if entry.sha256.trim().is_empty() {
+        let sha256 = if entry_snapshot.sha256.trim().is_empty() {
             provenance.sha256.clone()
         } else {
-            entry.sha256.clone()
+            entry_snapshot.sha256.clone()
         };
 
         if source_url.is_empty() {
@@ -1984,33 +2140,59 @@ impl ToolchainService for Svc {
             return Ok(Response::new(resp));
         }
 
-        let signature_record = signature_record_from_provenance(&provenance).or_else(|| {
-            if is_remote_url(&source_url) {
-                catalog_artifact_for_provenance(
-                    &self.catalog,
-                    &provenance.provider_id,
-                    &provenance.version,
-                    &source_url,
-                    &sha256,
-                )
-                .and_then(|artifact| signature_record_from_catalog(&artifact))
-            } else {
-                None
+        drop(st);
+
+        let known_artifact = if is_remote_url(&source_url) {
+            self.known_artifact_for_source(
+                &provenance.provider_id,
+                &provenance.version,
+                &source_url,
+                &sha256,
+            )
+            .await
+        } else {
+            None
+        };
+
+        if let Err(err) =
+            verify_provenance_entry(&entry_snapshot, &provenance, known_artifact.as_ref())
+        {
+            let err_detail = job_error_detail(
+                ErrorCode::ToolchainVerifyFailed,
+                "provenance validation failed",
+                err,
+                &job_id,
+            );
+            let resp = VerifyToolchainResponse {
+                verified: false,
+                error: Some(err_detail),
+                job_id: Some(Id {
+                    value: job_id.clone(),
+                }),
+            };
+            let mut st = self.state.lock().await;
+            if let Some(entry) = st
+                .installed
+                .iter_mut()
+                .find(|item| item.toolchain_id.as_ref().map(|i| &i.value) == Some(&id))
+            {
+                entry.verified = false;
             }
+            save_state_best_effort(&st);
+            drop(st);
+            let _ = publish_failed(&mut job_client, &job_id, resp.error.clone().unwrap()).await;
+            return Ok(Response::new(resp));
+        }
+
+        let signature_record = signature_record_from_provenance(&provenance).or_else(|| {
+            known_artifact
+                .as_ref()
+                .and_then(signature_record_from_catalog)
         });
         let transparency_record = transparency_record_from_provenance(&provenance).or_else(|| {
-            if is_remote_url(&source_url) {
-                catalog_artifact_for_provenance(
-                    &self.catalog,
-                    &provenance.provider_id,
-                    &provenance.version,
-                    &source_url,
-                    &sha256,
-                )
-                .and_then(|artifact| transparency_record_from_catalog(&artifact))
-            } else {
-                None
-            }
+            known_artifact
+                .as_ref()
+                .and_then(transparency_record_from_catalog)
         });
 
         if cancel_requested(Some(&cancel_rx)) {
@@ -2032,8 +2214,6 @@ impl ToolchainService for Svc {
             sha256: sha256.clone(),
             size_bytes: 0,
         };
-
-        drop(st);
 
         let _ = publish_progress(
             &mut job_client,

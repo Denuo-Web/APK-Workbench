@@ -565,7 +565,14 @@ fn populate_combo_versions(
     fallback: &str,
     preferred: Option<&str>,
 ) {
-    let current = combo.active_id().map(|id| id.to_string());
+    let preferred = preferred
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string());
+    let current = combo
+        .active_id()
+        .map(|id| id.to_string())
+        .filter(|value| preferred.is_some() || value != fallback);
     combo.remove_all();
     if versions.is_empty() {
         if !fallback.trim().is_empty() {
@@ -577,7 +584,7 @@ fn populate_combo_versions(
     for version in versions {
         combo.append(Some(version.as_str()), version);
     }
-    let desired = current.or_else(|| preferred.map(|value| value.to_string()));
+    let desired = preferred.or(current);
     if let Some(desired) = desired {
         if let Some(index) = versions.iter().position(|v| v == &desired) {
             combo.set_active(Some(index as u32));
@@ -2016,14 +2023,17 @@ pub(crate) fn page_toolchains(
     let list = gtk::Button::with_label("List providers");
     let list_sdk = gtk::Button::with_label("List available SDKs");
     let list_ndk = gtk::Button::with_label("List available NDKs");
+    let check_upstream = gtk::Button::with_label("Check new releases");
     let list_sets = gtk::Button::with_label("List sets");
     set_tooltip(&list, "What: List toolchain providers. Why: discover provider ids and supported kinds. How: click to query ToolchainService.");
     set_tooltip(&list_sdk, "What: List available SDK versions. Why: populate the SDK version dropdown. How: click then select a version.");
     set_tooltip(&list_ndk, "What: List available NDK versions. Why: populate the NDK version dropdown. How: click then select a version.");
+    set_tooltip(&check_upstream, "What: Check upstream GitHub releases for newer SDK/NDK versions. Why: see whether the pinned catalog is behind and refresh the version dropdowns. How: click to compare catalog vs upstream.");
     set_tooltip(&list_sets, "What: List toolchain sets. Why: see existing SDK/NDK pairings. How: click to query ToolchainService.");
     row1.append(&list);
     row1.append(&list_sdk);
     row1.append(&list_ndk);
+    row1.append(&check_upstream);
     row1.append(&list_sets);
 
     let version_grid = gtk::Grid::builder()
@@ -2261,6 +2271,15 @@ pub(crate) fn page_toolchains(
         let cfg = cfg_list_sets.lock().unwrap().clone();
         cmd_tx_list_sets
             .try_send(UiCommand::ToolchainListSets { cfg })
+            .ok();
+    });
+
+    let cfg_check_upstream = cfg.clone();
+    let cmd_tx_check_upstream = cmd_tx.clone();
+    check_upstream.connect_clicked(move |_| {
+        let cfg = cfg_check_upstream.lock().unwrap().clone();
+        cmd_tx_check_upstream
+            .try_send(UiCommand::ToolchainCheckUpstream { cfg })
             .ok();
     });
 

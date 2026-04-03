@@ -59,6 +59,9 @@ pub(crate) enum UiCommand {
         cfg: AppConfig,
         provider_id: String,
     },
+    ToolchainCheckUpstream {
+        cfg: AppConfig,
+    },
     ToolchainInstall {
         cfg: AppConfig,
         provider_id: String,
@@ -393,6 +396,7 @@ impl UiCommand {
             UiCommand::JobsExportLogs { .. } => "jobs.export_logs",
             UiCommand::ToolchainListProviders { .. } => "toolchains.list_providers",
             UiCommand::ToolchainListAvailable { .. } => "toolchains.list_available",
+            UiCommand::ToolchainCheckUpstream { .. } => "toolchains.check_upstream",
             UiCommand::ToolchainInstall { .. } => "toolchains.install",
             UiCommand::ToolchainListInstalled { .. } => "toolchains.list_installed",
             UiCommand::ToolchainListSets { .. } => "toolchains.list_sets",

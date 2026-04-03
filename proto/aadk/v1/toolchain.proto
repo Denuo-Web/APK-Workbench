@@ -35,6 +35,14 @@ message AvailableToolchain {
   ToolchainArtifact artifact = 3;
 }
 
+message UpstreamToolchainRelease {
+  ToolchainVersion version = 1;
+  ToolchainArtifact artifact = 2;
+  bool in_catalog = 3;
+  string published_at = 4;
+  string release_url = 5;
+}
+
 message InstalledToolchain {
   Id toolchain_id = 1;
   ToolchainProvider provider = 2;
@@ -58,6 +66,15 @@ message ListProvidersResponse { repeated ToolchainProvider providers = 1; }
 
 message ListAvailableRequest { Id provider_id = 1; Pagination page = 2; }
 message ListAvailableResponse { repeated AvailableToolchain items = 1; PageInfo page_info = 2; }
+
+message CheckUpstreamReleasesRequest { Id provider_id = 1; }
+message CheckUpstreamReleasesResponse {
+  ToolchainProvider provider = 1;
+  string latest_catalog_version = 2;
+  string latest_upstream_version = 3;
+  bool catalog_outdated = 4;
+  repeated UpstreamToolchainRelease releases = 5;
+}
 
 message ListInstalledRequest { ToolchainKind kind = 1; }
 message ListInstalledResponse { repeated InstalledToolchain items = 1; }
@@ -127,6 +144,7 @@ message GetActiveToolchainSetResponse { ToolchainSet set = 1; }
 service ToolchainService {
   rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
   rpc ListAvailable(ListAvailableRequest) returns (ListAvailableResponse);
+  rpc CheckUpstreamReleases(CheckUpstreamReleasesRequest) returns (CheckUpstreamReleasesResponse);
   rpc ListInstalled(ListInstalledRequest) returns (ListInstalledResponse);
   rpc ListToolchainSets(ListToolchainSetsRequest) returns (ListToolchainSetsResponse);
 

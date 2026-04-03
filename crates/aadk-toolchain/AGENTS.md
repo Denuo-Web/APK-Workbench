@@ -10,7 +10,7 @@ Update this file whenever ToolchainService behavior changes or when commits touc
 
 ## gRPC contract
 - proto/aadk/v1/toolchain.proto
-- RPCs: ListProviders, ListAvailable, ListInstalled, ListToolchainSets, InstallToolchain,
+- RPCs: ListProviders, ListAvailable, CheckUpstreamReleases, ListInstalled, ListToolchainSets, InstallToolchain,
   VerifyToolchain, UpdateToolchain, UninstallToolchain, CleanupToolchainCache,
   CreateToolchainSet, SetActiveToolchainSet, GetActiveToolchainSet, ReloadState
 
@@ -25,12 +25,16 @@ Update this file whenever ToolchainService behavior changes or when commits touc
 - Service bootstrap, timestamps, and base data paths rely on `aadk-util` to keep defaults consistent.
 - Providers and versions come from a JSON catalog (crates/aadk-toolchain/catalog.json or
   AADK_TOOLCHAIN_CATALOG override).
+- The custom SDK/NDK providers also support cached upstream discovery from GitHub Releases; list
+  and explicit upstream-check requests merge or compare host-compatible release metadata against the
+  pinned catalog.
 - Catalog pins SDK 36.0.0/35.0.2 and NDK r29/r28c/r27d/r26d for the android-* custom providers. Linux
   ARM64 artifacts use linux-aarch64 (musl), aarch64-linux-android, and aarch64_be-linux-musl; Windows
   ARM64 NDK artifacts (windows-aarch64 .7z) are included for r29/r28c/r27d. No darwin SDK/NDK
   artifacts are available in the custom catalogs.
 - Host selection uses AADK_TOOLCHAIN_HOST when set and falls back to host aliases (for example,
-  linux-aarch64 -> aarch64-linux-musl/aarch64-linux-android/aarch64_be-linux-musl) plus
+  linux-aarch64 -> aarch64-linux-musl/aarch64-linux-android/aarch64_be-linux-musl,
+  windows-aarch64 -> aarch64-w64-mingw32, and windows-x86_64 -> x86_64-w64-mingw32, plus
   AADK_TOOLCHAIN_HOST_FALLBACK when the catalog lacks a matching artifact.
 - Available versions can also be sourced from fixture archives via AADK_TOOLCHAIN_FIXTURES_DIR.
 - Toolchains are installed under ~/.local/share/aadk/toolchains and cached in
@@ -38,9 +42,10 @@ Update this file whenever ToolchainService behavior changes or when commits touc
 - SDK installs normalize cmdline-tools layout by adding cmdline-tools/latest links when archives
   ship a flat cmdline-tools/bin + lib layout.
 - Install/Update/Verify job progress metrics include provider/version/host/verify settings plus artifact URLs/paths and install roots.
-- verify_toolchain checks install path, provenance contents, catalog consistency, artifact size,
-  optional Ed25519 signatures (over SHA256 digest), transparency log entries when configured, and
-  layout; it re-fetches the artifact for hash verification when needed.
+- verify_toolchain checks install path, provenance contents, known-release consistency (catalog or
+  upstream GitHub metadata), artifact size, optional Ed25519 signatures (over SHA256 digest),
+  transparency log entries when configured, and layout; it re-fetches the artifact for hash
+  verification when needed.
 - Catalog artifacts can supply signature metadata via `signature`, `signature_url`, and
   `signature_public_key` (hex or base64); signatures are recorded in provenance when available.
 - InstallToolchain and VerifyToolchain accept optional job_id to reuse existing JobService jobs,
@@ -56,8 +61,8 @@ Update this file whenever ToolchainService behavior changes or when commits touc
 
 ## Data flow and dependencies
 - Uses JobService for install/verify jobs and publishes logs/progress events.
-- UI/CLI call ListProviders/ListAvailable/ListInstalled/ListToolchainSets/Install/Verify plus
-  toolchain set management RPCs.
+- UI/CLI call ListProviders/ListAvailable/CheckUpstreamReleases/ListInstalled/ListToolchainSets/
+  Install/Verify plus toolchain set management RPCs.
 
 ## Environment / config
 - AADK_TOOLCHAIN_ADDR sets the bind address (default 127.0.0.1:50052).
@@ -66,6 +71,7 @@ Update this file whenever ToolchainService behavior changes or when commits touc
 - AADK_TOOLCHAIN_CATALOG overrides the provider catalog path.
 - AADK_TOOLCHAIN_HOST overrides detected host (e.g., linux-aarch64, linux-x86_64).
 - AADK_TOOLCHAIN_HOST_FALLBACK provides a comma-separated fallback host list.
+- Upstream GitHub release metadata is cached in-memory for five minutes per provider.
 - AADK_TELEMETRY and AADK_TELEMETRY_CRASH enable opt-in usage/crash reporting (local spool).
 
 ## Telemetry

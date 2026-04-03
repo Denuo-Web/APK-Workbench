@@ -33,6 +33,8 @@ Update this file whenever proto contracts change or when commits touching this d
 - Added RunId as a shared identifier and threaded it through job + service requests.
 - Added StreamRunEvents RPC for aggregated run-level job event streaming.
 - Added ObserveService RunFilter/UpsertRun and workflow.proto for pipeline orchestration.
+- Extended toolchain.proto with CheckUpstreamReleases plus UpstreamToolchainRelease so clients can
+  compare pinned toolchain catalog entries against upstream GitHub releases.
 
 ## Code generation
 - Build script: crates/aadk-proto/build.rs

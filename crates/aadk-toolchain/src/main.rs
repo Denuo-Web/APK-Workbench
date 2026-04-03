@@ -6,6 +6,7 @@ mod jobs;
 mod provenance;
 mod service;
 mod state;
+mod upstream;
 mod verify;
 
 use aadk_proto::aadk::v1::toolchain_service_server::ToolchainServiceServer;

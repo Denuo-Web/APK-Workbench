@@ -278,6 +278,8 @@ fn host_aliases(host: &str) -> Vec<String> {
         "linux-x86_64" => aliases.push("x86_64-linux-gnu".into()),
         "darwin-aarch64" => aliases.push("macos-aarch64".into()),
         "darwin-x86_64" => aliases.push("macos-x86_64".into()),
+        "windows-aarch64" => aliases.push("aarch64-w64-mingw32".into()),
+        "windows-x86_64" => aliases.push("x86_64-w64-mingw32".into()),
         _ => {}
     }
     aliases
@@ -294,7 +296,7 @@ fn fallback_hosts() -> Vec<String> {
     }
 }
 
-fn host_candidates(host: &str) -> Vec<String> {
+pub(crate) fn host_candidates(host: &str) -> Vec<String> {
     let mut candidates = Vec::new();
     candidates.push(host.to_string());
     candidates.extend(host_aliases(host));

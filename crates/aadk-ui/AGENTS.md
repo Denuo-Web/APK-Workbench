@@ -38,7 +38,11 @@ Update this file whenever UI behavior changes or when commits touching this crat
 - Sidebar order is Job Control, Workflow, Toolchains, Projects, Build, Targets, Job History, Evidence, Settings (Home -> Job Control, Console -> Build).
 - Settings now includes WorkflowService alongside the other service endpoints.
 - Toolchains page fetches available SDK/NDK versions and populates dropdowns; install/verify actions
-  use the selected version and default to the latest SDK_VERSION/NDK_VERSION.
+  use the selected version, and the synthetic fallback values no longer override the first real
+  discovered version when the user has not saved a preference yet.
+- Toolchains page includes a "Check new releases" action that calls ToolchainService
+  CheckUpstreamReleases for both providers, logs catalog-vs-upstream status, and refreshes the SDK
+  and NDK version dropdowns from the merged availability list.
 - Toolchains page includes a "Use latest installed" shortcut to create and activate a toolchain set from the most recently installed SDK/NDK.
 - The Cuttlefish docs button opens https://source.android.com/docs/devices/cuttlefish/get-started.
 - The Targets page includes an "Open Cuttlefish Env" button using AADK_CUTTLEFISH_ENV_URL (default https://localhost:1443).
