@@ -1,0 +1,5 @@
+@PKGNAME@ (@VERSION@) unstable; urgency=medium
+
+  * Release @VERSION@.
+
+ -- @MAINTAINER@  @DATE_RFC2822@

@@ -1,11 +1,11 @@
-Package: aadk
+Package: @PKGNAME@
 Version: @VERSION@
 Section: devel
 Priority: optional
 Architecture: @ARCH@
-Maintainer: Jaron Rosenau <jaron@rosenau.info>
-Depends: bash, libgtk-4-1
-Recommends: openjdk-21-jre | openjdk-17-jre
-Description: AADK Android DevKit suite
+Maintainer: @MAINTAINER@
+Depends: libc6, libgtk-4-1
+Recommends: @JAVA_RUNTIME_RECOMMENDS@
+Description: @SUMMARY@
  AADK provides a GTK UI plus gRPC services for toolchain,
  project, build, targets, workflows, and job monitoring.

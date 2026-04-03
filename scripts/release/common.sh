@@ -3,6 +3,12 @@
 # Shared release metadata keeps packaging scripts aligned.
 AADK_RELEASE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AADK_RELEASE_ROOT="$(cd "${AADK_RELEASE_SCRIPT_DIR}/../.." && pwd)"
+# shellcheck source=scripts/release/aadk-env.sh
+source "${AADK_RELEASE_SCRIPT_DIR}/aadk-env.sh"
+
+AADK_RELEASE_DEFAULT_PKGNAME="aadk"
+AADK_RELEASE_DEB_MAINTAINER="${AADK_RELEASE_DEB_MAINTAINER:-Jaron Rosenau <jaron@rosenau.info>}"
+AADK_RELEASE_DEB_SUMMARY="${AADK_RELEASE_DEB_SUMMARY:-Android DevKit workflow suite}"
 
 aadk_release_binaries=(
   aadk-core
@@ -37,6 +43,23 @@ aadk_workspace_version() {
     return 1
   fi
   printf '%s\n' "$version"
+}
+
+aadk_release_default_pkgname() {
+  printf '%s\n' "$AADK_RELEASE_DEFAULT_PKGNAME"
+}
+
+aadk_release_escape_sed_replacement() {
+  printf '%s' "$1" | sed -e 's/[\\/&]/\\&/g'
+}
+
+aadk_release_rfc2822_date() {
+  if [ -n "${SOURCE_DATE_EPOCH:-}" ]; then
+    date -u -d "@${SOURCE_DATE_EPOCH}" -R
+    return 0
+  fi
+
+  date -R
 }
 
 aadk_release_require_linux_arm64() {
@@ -112,6 +135,15 @@ aadk_release_install_binaries() {
     fi
     install -m 755 "${AADK_RELEASE_ROOT}/target/release/${bin}" "${dest_dir}/${bin}"
   done
+}
+
+aadk_release_install_launcher() {
+  local dest_dir="$1"
+  local launcher_name="${2:-aadk-start.sh}"
+
+  install -d "$dest_dir"
+  install -m 755 "${AADK_RELEASE_ROOT}/scripts/release/aadk-start.sh" "${dest_dir}/${launcher_name}"
+  install -m 755 "${AADK_RELEASE_ROOT}/scripts/release/aadk-env.sh" "${dest_dir}/aadk-env.sh"
 }
 
 aadk_release_install_docs() {

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=common.sh
+# shellcheck source=scripts/release/common.sh
 source "${SCRIPT_DIR}/common.sh"
 
 cd "${AADK_RELEASE_ROOT}"
@@ -20,7 +20,7 @@ aadk_release_print_binaries
 
 rm -rf "${OUT}"
 aadk_release_install_binaries "${OUT}"
-install -m 755 scripts/release/aadk-start.sh "${OUT}/aadk-start.sh"
+aadk_release_install_launcher "${OUT}" "aadk-start.sh"
 aadk_release_install_docs "${OUT}"
 rm -f "${ARCHIVE}" "${CHECKSUM}"
 tar -C dist -czf "${ARCHIVE}" "aadk-${VERSION}-linux-aarch64"

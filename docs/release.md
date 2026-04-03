@@ -53,8 +53,10 @@ Requires `dpkg-deb` (from `dpkg-dev`) on a Debian-like ARM64 host (for example,
 Debian 13 or Raspberry Pi OS 64-bit).
 
 `scripts/release/build-deb.sh` shares the same workspace-version default and
-binary list as the tarball builder. It also validates Linux ARM64 and checks
-that the Debian architecture matches `ARCH` (default `arm64`) unless
+binary list as the tarball builder, templates `PKGNAME` through the Debian
+control metadata, and derives Java runtime recommendations from the shared
+launcher environment policy. It also validates Linux ARM64 and checks that the
+Debian architecture matches `ARCH` (default `arm64`) unless
 `AADK_ALLOW_UNSUPPORTED_RELEASE_HOST=1`.
 
 ```bash
@@ -66,9 +68,17 @@ Override the version:
 VERSION=0.1.0 scripts/release/build-deb.sh
 ```
 
-Artifacts:
+Override the package name:
+```bash
+PKGNAME=aadk-nightly scripts/release/build-deb.sh
+```
+
+Default artifacts:
 - `dist/aadk_${VERSION}_arm64.deb`
 - `dist/aadk_${VERSION}_arm64.deb.sha256`
+
+When `PKGNAME` is overridden, the `.deb` filename and the package name used for
+install/remove commands change to match it.
 
 If you build it, attach both files to the same GitHub Release as optional
 Debian-specific downloads.
@@ -79,7 +89,7 @@ sudo apt install ./dist/aadk_${VERSION}_arm64.deb
 ```
 
 Menu entry:
-- Appears under `Programming` as `AADK`.
+- Appears under `Development` as `AADK`.
 - Runs `aadk` (services + GTK UI). Logs go to `~/.local/share/aadk/logs`.
 
 Uninstall:

@@ -6,6 +6,6 @@ TryExec=/usr/bin/aadk
 Icon=aadk
 Terminal=false
 Type=Application
-Categories=Development;Programming;
+Categories=Development;
 StartupNotify=true
 Keywords=android;devkit;grpc;
