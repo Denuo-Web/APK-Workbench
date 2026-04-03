@@ -1,7 +1,7 @@
-# AADK Full Scaffold - Agent Overview
+# AADK Full - Agent Overview
 
 ## Purpose
-This repository is a GUI-first, multi-service gRPC scaffold for an Android DevKit style workflow.
+This repository is a GUI-first, multi-service gRPC platform for an Android DevKit style workflow.
 It is intentionally minimal but complete enough to extend. The GTK4 UI and CLI are thin clients;
 the service crates contain the real workflows. The project is designed around a JobService that
 streams events to clients while long-running jobs execute in other services.
@@ -19,6 +19,9 @@ streams events to clients while long-running jobs execute in other services.
   android-cuttlefish apt repo install command.
 - GitHub Releases is the canonical binary distribution channel (`linux-aarch64.tar.gz` plus checksums);
   the Debian `.deb` is an additional convenience artifact, and GitHub Packages is not used for native binaries.
+- Release packaging scripts default `VERSION` from workspace metadata, share a single binary list via
+  `scripts/release/common.sh`, and enforce Linux ARM64 host checks unless
+  `AADK_ALLOW_UNSUPPORTED_RELEASE_HOST=1` is set for explicit experimental packaging.
 
 ## Maintenance
 Keep this file and the per-service AGENTS.md files in sync with code changes. When Codex changes
@@ -40,6 +43,7 @@ completed items or move them into the implementation notes.
 - crates/aadk-proto: Rust gRPC codegen for proto/aadk/v1
 - proto/aadk/v1/*.proto: gRPC contracts
 - scripts/dev/run-all.sh: local dev runner for all services (auto-exports ANDROID_SDK_ROOT/ANDROID_HOME and AADK_ADB_PATH when an SDK is detected)
+- scripts/release/common.sh: shared release metadata/helpers (workspace version, supported-host guards, binary list)
 - scripts/release/build.sh: release build + GitHub Releases tarball packaging helper
 - scripts/release/build-deb.sh: Debian (.deb) convenience package builder (installs UI menu entry + start script)
 - scripts/release/aadk-start.sh: installed launcher (services + UI, logs to ~/.local/share/aadk/logs)

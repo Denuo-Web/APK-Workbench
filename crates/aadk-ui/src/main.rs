@@ -36,7 +36,7 @@ use worker::{handle_command, AppState};
 
 fn main() {
     let app = gtk::Application::builder()
-        .application_id("dev.aadk.ui.full_scaffold")
+        .application_id("dev.aadk.ui.full")
         .build();
 
     app.connect_activate(build_ui);
@@ -660,7 +660,7 @@ fn build_ui(app: &gtk::Application) {
     let (default_width, default_height) = default_window_size();
     let window = gtk::ApplicationWindow::builder()
         .application(app)
-        .title("AADK UI — Full Scaffold")
+        .title("AADK UI")
         .default_width(default_width)
         .default_height(default_height)
         .resizable(true)

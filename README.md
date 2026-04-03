@@ -1,8 +1,8 @@
 [![AADK UI demo](docs/ARM64.gif)](docs/ARM64.mp4)
 
-# AADK Full Scaffold
+# AADK Full
 
-GUI-first, multi-service gRPC scaffold for an Android DevKit style workflow. The GTK UI and CLI
+GUI-first, multi-service gRPC platform for an Android DevKit style workflow. The GTK UI and CLI
 are thin clients; all real work lives in the service crates. JobService is the event bus that
 streams job state/progress/logs to clients.
 
@@ -21,7 +21,7 @@ streams job state/progress/logs to clients.
 - JobService stores job records, replays history, and streams live events (including run-level aggregation).
 - Toolchain/Build/Targets/Observe services create jobs and publish events to JobService.
 - ObserveService stores run history plus run output inventory (bundles/artifacts) with a summary pointer for dashboards.
-- ProjectService is the source of truth for project metadata and template scaffolding.
+- ProjectService is the source of truth for project metadata and template setup.
 - WorkflowService orchestrates multi-step pipelines and upserts run records for observability.
 
 ## Source map (main entry points)
@@ -210,7 +210,7 @@ scripted flows.
 ### ProjectService (aadk-project)
 - Template registry backed by JSON (`AADK_PROJECT_TEMPLATES` or default registry).
 - Template defaults (minSdk/compileSdk) resolved from registry/Gradle files with schema validation.
-- Create/open project, scaffold files on disk, store metadata and recents.
+- Create/open project, create files on disk, store metadata and recents.
 - Exposes GetProject for authoritative project resolution.
 
 ### BuildService (aadk-build)

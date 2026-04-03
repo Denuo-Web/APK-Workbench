@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 use tonic::transport::Channel;
 
 #[derive(Parser)]
-#[command(name = "aadk-cli", version, about = "AADK scaffold CLI")]
+#[command(name = "aadk-cli", version, about = "AADK CLI")]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,

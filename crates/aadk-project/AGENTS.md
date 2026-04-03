@@ -26,7 +26,7 @@ Update this file whenever ProjectService behavior changes or when commits touchi
   EmptyActivity/ for bundled Android starters. Empty Activity includes the Material Components
   dependency to provide the Theme.Material3.* XML styles used by its themes, plus a default
   ic_launcher_foreground drawable so sample code referencing it compiles.
-- create_project scaffolds files from the template directory, streams job progress/logs to
+- create_project copies files from the template directory, streams job progress/logs to
   JobService, and persists metadata in .aadk/project.json plus the recent list; requests can
   attach to an existing job_id and supply correlation_id/run_id for grouped workflows.
 - create_project attempts to write local.properties with sdk.dir from ANDROID_SDK_ROOT/ANDROID_HOME

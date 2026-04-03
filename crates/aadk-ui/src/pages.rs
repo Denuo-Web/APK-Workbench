@@ -1425,7 +1425,7 @@ pub(crate) fn page_workflow(
     let support_check = gtk::CheckButton::with_label("Export support bundle");
     let evidence_check = gtk::CheckButton::with_label("Export evidence bundle");
 
-    set_tooltip(&create_check, "What: Run project.create. Why: scaffold a project before build. How: enable when you want to create from a template.");
+    set_tooltip(&create_check, "What: Run project.create. Why: create a project before build. How: enable when you want to create from a template.");
     set_tooltip(&open_check, "What: Run project.open. Why: open an existing project. How: enable when you have a project path.");
     set_tooltip(&verify_check, "What: Run toolchain.verify. Why: ensure SDK/NDK installs are valid. How: enable to verify a toolchain id.");
     set_tooltip(
