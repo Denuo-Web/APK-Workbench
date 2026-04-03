@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${VERSION:-0.1.0}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=common.sh
+source "${SCRIPT_DIR}/common.sh"
+
+cd "${AADK_RELEASE_ROOT}"
+
+VERSION="${VERSION:-$(aadk_workspace_version)}"
 ARCH="${ARCH:-arm64}"
 PKGNAME="${PKGNAME:-aadk}"
 
@@ -18,6 +24,9 @@ if ! command -v dpkg-deb >/dev/null 2>&1; then
   echo "ERROR: dpkg-deb not found. Install dpkg-dev." >&2
   exit 1
 fi
+
+aadk_release_require_linux_arm64
+aadk_release_require_debian_arch "${ARCH}"
 
 if [ ! -f "scripts/release/aadk-start.sh" ]; then
   echo "ERROR: missing scripts/release/aadk-start.sh" >&2
@@ -41,15 +50,16 @@ fi
 
 mkdir -p dist
 
-cargo build --release --workspace
+aadk_release_build_workspace
+aadk_release_print_binaries
 
 rm -rf "$ROOT"
 install -d "$BIN_DIR" "$DOC_DIR" "$APP_DIR" "$ICON_DIR" "$DEBIAN_DIR" "$ROOT/usr/bin" "$ROOT/opt"
 
-install -m 755 target/release/aadk-{core,workflow,toolchain,project,build,targets,observe,ui,cli} "$BIN_DIR/"
+aadk_release_install_binaries "$BIN_DIR"
 install -m 755 scripts/release/aadk-start.sh "$BIN_DIR/aadk-start"
 
-install -m 644 README.md LICENSE "$DOC_DIR/"
+aadk_release_install_docs "$DOC_DIR"
 install -m 644 packaging/deb/aadk.desktop "$APP_DIR/aadk.desktop"
 install -m 644 assets/aadk.svg "$ICON_DIR/aadk.svg"
 
@@ -62,8 +72,9 @@ sed -e "s/@VERSION@/${VERSION}/g" -e "s/@ARCH@/${ARCH}/g" packaging/deb/control.
 install -m 755 packaging/deb/postinst "$DEBIAN_DIR/postinst"
 install -m 755 packaging/deb/postrm "$DEBIAN_DIR/postrm"
 
-rm -f "$OUTPUT"
+rm -f "$OUTPUT" "$OUTPUT.sha256"
 dpkg-deb --build --root-owner-group "$ROOT" "$OUTPUT"
 sha256sum "$OUTPUT" > "$OUTPUT.sha256"
 
 echo "Built $OUTPUT"
+echo "Built $OUTPUT.sha256"

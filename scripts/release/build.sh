@@ -1,17 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${VERSION:-0.1.0}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=common.sh
+source "${SCRIPT_DIR}/common.sh"
+
+cd "${AADK_RELEASE_ROOT}"
+
+VERSION="${VERSION:-$(aadk_workspace_version)}"
 OUT="dist/aadk-${VERSION}-linux-aarch64"
 ARCHIVE="dist/aadk-${VERSION}-linux-aarch64.tar.gz"
 CHECKSUM="${ARCHIVE}.sha256"
 
-cargo build --release --workspace
-ls -1 target/release/aadk-*
+aadk_release_require_linux_arm64
+mkdir -p dist
 
-mkdir -p "${OUT}"
-cp target/release/aadk-{core,workflow,toolchain,project,build,targets,observe,ui,cli} "${OUT}/"
-cp scripts/release/aadk-start.sh "${OUT}/aadk-start.sh"
-cp README.md LICENSE "${OUT}/"
+aadk_release_build_workspace
+aadk_release_print_binaries
+
+rm -rf "${OUT}"
+aadk_release_install_binaries "${OUT}"
+install -m 755 scripts/release/aadk-start.sh "${OUT}/aadk-start.sh"
+aadk_release_install_docs "${OUT}"
+rm -f "${ARCHIVE}" "${CHECKSUM}"
 tar -C dist -czf "${ARCHIVE}" "aadk-${VERSION}-linux-aarch64"
 sha256sum "${ARCHIVE}" > "${CHECKSUM}"
+
+echo "Built ${ARCHIVE}"
+echo "Built ${CHECKSUM}"
