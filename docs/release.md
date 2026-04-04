@@ -14,6 +14,10 @@ Use GitHub Releases as the canonical binary distribution channel:
 cargo build --release --workspace --locked
 ```
 
+For `aadk-ui`, the host also needs the GTK4 and WebKitGTK development packages
+available to `pkg-config`; on Debian 13 that means `libgtk-4-dev` and
+`libwebkitgtk-6.0-dev`.
+
 ## Package a release archive
 `scripts/release/build.sh` is the canonical tarball flow. It defaults
 `VERSION` from `[workspace.package]` in `Cargo.toml`, validates Linux aarch64
@@ -88,6 +92,9 @@ Install:
 ```bash
 sudo apt install ./dist/aadk_${VERSION}_arm64.deb
 ```
+
+The Debian package pulls the GTK4 and WebKitGTK runtime libraries needed for
+the embedded Cuttlefish pane automatically.
 
 Menu entry:
 - Appears under `Development` as `AADK`.

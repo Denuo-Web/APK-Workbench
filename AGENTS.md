@@ -23,7 +23,8 @@ streams events to clients while long-running jobs execute in other services.
   `scripts/release/common.sh`, share Java runtime policy via `scripts/release/aadk-env.sh`, and enforce Linux ARM64 host checks unless
   `AADK_ALLOW_UNSUPPORTED_RELEASE_HOST=1` is set for explicit experimental packaging.
 - Debian packages install the launcher and binaries under `/usr/lib/aadk`, expose `/usr/bin/{aadk,aadk-ui,aadk-cli}` symlinks,
-  ship minimal manpages for those commands, validate `PKGNAME` before packaging, and strip staged binaries during packaging.
+  ship minimal manpages for those commands, depend on `libgtk-4-1` plus `libwebkitgtk-6.0-4` for the embedded Cuttlefish pane,
+  validate `PKGNAME` before packaging, and strip staged binaries during packaging.
 
 ## Maintenance
 Keep this file and the per-service AGENTS.md files in sync with code changes. When Codex changes

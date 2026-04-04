@@ -4,7 +4,7 @@ Section: devel
 Priority: optional
 Architecture: @ARCH@
 Maintainer: @MAINTAINER@
-Depends: libc6, libgtk-4-1
+Depends: libc6, libgtk-4-1, libwebkitgtk-6.0-4
 Recommends: @JAVA_RUNTIME_RECOMMENDS@
 Description: @SUMMARY@
  AADK provides a GTK UI plus gRPC services for toolchain,

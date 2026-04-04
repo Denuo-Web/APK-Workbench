@@ -112,10 +112,14 @@ sudo apt update
 sudo apt install -y \
   build-essential pkg-config \
   libgtk-4-dev \
+  libwebkitgtk-6.0-dev \
   protobuf-compiler \
   git curl \
   xz-utils zstd
 ```
+
+`libwebkitgtk-6.0-dev` is required to build `aadk-ui` now that the Targets page
+embeds the Cuttlefish WebRTC view inside the GTK app.
 
 ### 2) Rust toolchain (if needed)
 ```bash
