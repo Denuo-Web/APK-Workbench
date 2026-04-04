@@ -351,6 +351,7 @@ pub(crate) enum AppEvent {
     TargetsCuttlefishState {
         state: String,
         adb_serial: String,
+        webrtc_url: Option<String>,
     },
     ToolchainAvailable {
         provider_id: String,

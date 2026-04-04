@@ -1156,8 +1156,13 @@ fn build_ui(app: &gtk::Application) {
                     AppEvent::SetCuttlefishBuildId { build_id } => {
                         targets_for_events.set_cuttlefish_build_id(&build_id);
                     }
-                    AppEvent::TargetsCuttlefishState { state, adb_serial } => {
-                        targets_for_events.set_cuttlefish_state(&state, &adb_serial);
+                    AppEvent::TargetsCuttlefishState {
+                        state,
+                        adb_serial,
+                        webrtc_url,
+                    } => {
+                        targets_for_events
+                            .set_cuttlefish_state(&state, &adb_serial, webrtc_url.as_deref());
                     }
                     AppEvent::ToolchainAvailable {
                         provider_id,

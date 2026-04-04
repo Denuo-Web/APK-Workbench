@@ -46,6 +46,8 @@ Update this file whenever UI behavior changes or when commits touching this crat
 - Toolchains page includes a "Use latest installed" shortcut to create and activate a toolchain set from the most recently installed SDK/NDK.
 - The Cuttlefish docs button opens https://source.android.com/docs/devices/cuttlefish/get-started.
 - The Targets page includes an "Open Cuttlefish Env" button using AADK_CUTTLEFISH_ENV_URL (default https://localhost:1443).
+- The Targets page now includes an embedded Cuttlefish WebRTC pane powered by WebKitGTK; it keeps the
+  current WebRTC URL visible, reloads in-app, and still offers browser handoff via the existing Web UI button.
 - Observe export requests include optional metadata fields (project/target/toolchain ids), currently unset in the UI.
 - Toolchains/Projects/Targets/Build/Evidence pages include a "Use job id" toggle plus
   correlation id entry to attach work to existing jobs and grouped workflows; the UI derives run_id
@@ -90,6 +92,9 @@ Update this file whenever UI behavior changes or when commits touching this crat
 - Targets now tracks Cuttlefish state updates from status/start/stop responses and adjusts the
   Start/Stop button enabled state accordingly; the Status button label includes the latest known
   state (for example `Status (running)`).
+- Targets status updates now also capture the resolved `cuttlefish_webrtc_url` detail and feed the
+  embedded viewer; the viewer uses a dedicated WebKit network session with TLS errors ignored so
+  the local self-signed Cuttlefish endpoint can render in-app.
 - Targets keeps Stop enabled for non-running states so stale Cuttlefish instances can still be
   cleaned up even when status probes report stopped/error.
 - Targets start/stop/status RPC failures are logged in the Targets console instead of failing

@@ -3276,6 +3276,7 @@ pub(crate) async fn handle_command(
             ui.send(AppEvent::TargetsCuttlefishState {
                 state: "starting".into(),
                 adb_serial: String::new(),
+                webrtc_url: None,
             })
             .ok();
 
@@ -3358,6 +3359,7 @@ pub(crate) async fn handle_command(
             ui.send(AppEvent::TargetsCuttlefishState {
                 state: "stopping".into(),
                 adb_serial: String::new(),
+                webrtc_url: None,
             })
             .ok();
 
@@ -4954,6 +4956,12 @@ async fn fetch_and_emit_cuttlefish_status(
         .get_cuttlefish_status(GetCuttlefishStatusRequest {})
         .await?
         .into_inner();
+    let webrtc_url = resp
+        .details
+        .iter()
+        .find(|kv| kv.key == "cuttlefish_webrtc_url")
+        .map(|kv| kv.value.trim().to_string())
+        .filter(|value| !value.is_empty());
     ui.send(AppEvent::Log {
         page,
         line: format!(
@@ -4965,10 +4973,11 @@ async fn fetch_and_emit_cuttlefish_status(
     ui.send(AppEvent::TargetsCuttlefishState {
         state: resp.state.clone(),
         adb_serial: resp.adb_serial.clone(),
+        webrtc_url,
     })
     .ok();
     if include_details {
-        for kv in resp.details {
+        for kv in &resp.details {
             ui.send(AppEvent::Log {
                 page,
                 line: format!("- {}: {}\n", kv.key, kv.value),

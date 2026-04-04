@@ -11,6 +11,8 @@ use gtk::glib::ControlFlow;
 use gtk::prelude::*;
 use gtk4 as gtk;
 use tokio::sync::mpsc;
+use webkit::prelude::*;
+use webkit6 as webkit;
 
 use crate::commands::UiCommand;
 use crate::config::AppConfig;
@@ -140,11 +142,15 @@ pub(crate) struct TargetsPage {
     pub(crate) cuttlefish_stop_button: gtk::Button,
     pub(crate) cuttlefish_branch_entry: gtk::Entry,
     pub(crate) cuttlefish_target_entry: gtk::Entry,
+    pub(crate) cuttlefish_web_url_entry: gtk::Entry,
     pub(crate) apk_entry: gtk::Entry,
     pub(crate) cuttlefish_build_entry: gtk::Entry,
     pub(crate) target_entry: gtk::Entry,
     pub(crate) app_id_entry: gtk::Entry,
     pub(crate) activity_entry: gtk::Entry,
+    cuttlefish_view_stack: gtk::Stack,
+    cuttlefish_view_placeholder_label: gtk::Label,
+    cuttlefish_view: webkit::WebView,
 }
 
 #[derive(Clone)]
@@ -302,6 +308,38 @@ impl TargetsPage {
         self.page.append(s);
     }
 
+    fn set_cuttlefish_view_placeholder(&self, message: &str) {
+        self.cuttlefish_view_placeholder_label.set_text(message);
+        self.cuttlefish_view_stack
+            .set_visible_child_name("placeholder");
+    }
+
+    fn sync_cuttlefish_view(&self, state: &str, webrtc_url: Option<&str>) {
+        let url = webrtc_url
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(default_cuttlefish_webrtc_url);
+        self.cuttlefish_web_url_entry.set_text(&url);
+
+        if matches!(state, "running" | "starting") {
+            let showing_view =
+                self.cuttlefish_view_stack.visible_child_name().as_deref() == Some("viewer");
+            let current_uri = self.cuttlefish_view.uri().map(|uri| uri.to_string());
+            if !showing_view || current_uri.as_deref() != Some(url.as_str()) {
+                self.cuttlefish_view_placeholder_label
+                    .set_text(&format!("Loading embedded Cuttlefish UI from {url}..."));
+                self.cuttlefish_view.load_uri(&url);
+            }
+            self.cuttlefish_view_stack.set_visible_child_name("viewer");
+            return;
+        }
+
+        self.set_cuttlefish_view_placeholder(&format!(
+            "Embedded Cuttlefish UI appears here when the instance is running.\nWebRTC URL: {url}\nUse Start to launch Cuttlefish or Reload embedded to try the endpoint directly."
+        ));
+    }
+
     pub(crate) fn set_target_id(&self, target_id: &str) {
         self.target_entry.set_text(target_id.trim());
     }
@@ -320,7 +358,12 @@ impl TargetsPage {
         }
     }
 
-    pub(crate) fn set_cuttlefish_state(&self, state: &str, adb_serial: &str) {
+    pub(crate) fn set_cuttlefish_state(
+        &self,
+        state: &str,
+        adb_serial: &str,
+        webrtc_url: Option<&str>,
+    ) {
         let normalized = state.trim().to_ascii_lowercase();
         let display_state = if normalized.is_empty() {
             "unknown"
@@ -346,6 +389,7 @@ impl TargetsPage {
                 self.cuttlefish_stop_button.set_sensitive(true);
             }
         }
+        self.sync_cuttlefish_view(display_state, webrtc_url);
     }
 
     pub(crate) fn set_application_id(&self, application_id: &str) {
@@ -970,6 +1014,14 @@ const KNOWN_JOB_TYPES: &[&str] = &[
     "observe.support_bundle",
     "observe.evidence_bundle",
 ];
+
+fn default_cuttlefish_webrtc_url() -> String {
+    std::env::var("AADK_CUTTLEFISH_WEBRTC_URL").unwrap_or_else(|_| "https://localhost:8443".into())
+}
+
+fn default_cuttlefish_env_url() -> String {
+    std::env::var("AADK_CUTTLEFISH_ENV_URL").unwrap_or_else(|_| "https://localhost:1443".into())
+}
 
 pub(crate) fn page_home(
     cfg: Arc<std::sync::Mutex<AppConfig>>,
@@ -3049,6 +3101,7 @@ pub(crate) fn page_targets(
     let default_branch = std::env::var("AADK_CUTTLEFISH_BRANCH").unwrap_or_default();
     let default_cuttlefish_target = std::env::var("AADK_CUTTLEFISH_TARGET").unwrap_or_default();
     let default_build_id = std::env::var("AADK_CUTTLEFISH_BUILD_ID").unwrap_or_default();
+    let default_webrtc_url = default_cuttlefish_webrtc_url();
 
     let cuttlefish_grid = gtk::Grid::builder()
         .row_spacing(ROW_SPACING)
@@ -3076,6 +3129,15 @@ pub(crate) fn page_targets(
     let label_branch = gtk::Label::builder().label("Branch").xalign(0.0).build();
     let label_target = gtk::Label::builder().label("Target").xalign(0.0).build();
     let label_build_id = gtk::Label::builder().label("Build id").xalign(0.0).build();
+    let label_webrtc_url = gtk::Label::builder()
+        .label("WebRTC URL")
+        .xalign(0.0)
+        .build();
+    let cuttlefish_web_url_entry = gtk::Entry::builder()
+        .text(&default_webrtc_url)
+        .editable(false)
+        .hexpand(true)
+        .build();
 
     cuttlefish_grid.attach(&label_branch, 0, 0, 1, 1);
     cuttlefish_grid.attach(&cuttlefish_branch_entry, 1, 0, 1, 1);
@@ -3083,12 +3145,78 @@ pub(crate) fn page_targets(
     cuttlefish_grid.attach(&cuttlefish_target_entry, 1, 1, 1, 1);
     cuttlefish_grid.attach(&label_build_id, 0, 2, 1, 1);
     cuttlefish_grid.attach(&cuttlefish_build_entry, 1, 2, 1, 1);
+    cuttlefish_grid.attach(&label_webrtc_url, 0, 3, 1, 1);
+    cuttlefish_grid.attach(&cuttlefish_web_url_entry, 1, 3, 1, 1);
+    set_tooltip(&cuttlefish_web_url_entry, "What: Cuttlefish WebRTC URL used by the embedded pane and browser launch. Why: shows the active endpoint returned by TargetService. How: copy it for debugging or open it with the Web UI button.");
 
     let cuttlefish_box = gtk::Box::new(gtk::Orientation::Vertical, ROW_SPACING);
     cuttlefish_box.append(&cuttlefish_buttons);
     cuttlefish_box.append(&cuttlefish_grid);
     let cuttlefish_frame = section_frame("Cuttlefish", &cuttlefish_box);
     sections.append(&cuttlefish_frame);
+
+    let embedded_reload = gtk::Button::with_label("Reload embedded");
+    set_tooltip(&embedded_reload, "What: Reload the embedded Cuttlefish viewer inside the GTK app. Why: retry the WebRTC page after start/restart without leaving the app. How: click after Cuttlefish is running, or use it to probe the configured URL.");
+
+    let embedded_actions = gtk::Box::new(gtk::Orientation::Horizontal, ROW_SPACING);
+    embedded_actions.append(&embedded_reload);
+
+    let cuttlefish_view_placeholder_label = gtk::Label::builder()
+        .label(format!(
+            "Embedded Cuttlefish UI appears here when the instance is running.\nWebRTC URL: {default_webrtc_url}\nUse Start to launch Cuttlefish or Reload embedded to try the endpoint directly."
+        ))
+        .wrap(true)
+        .xalign(0.0)
+        .selectable(true)
+        .build();
+    let cuttlefish_view_placeholder = gtk::Box::new(gtk::Orientation::Vertical, ROW_SPACING);
+    cuttlefish_view_placeholder.set_margin_top(12);
+    cuttlefish_view_placeholder.set_margin_bottom(12);
+    cuttlefish_view_placeholder.set_margin_start(12);
+    cuttlefish_view_placeholder.set_margin_end(12);
+    cuttlefish_view_placeholder.append(&cuttlefish_view_placeholder_label);
+
+    let view_settings = webkit::Settings::new();
+    view_settings.set_enable_javascript(true);
+    view_settings.set_enable_media(true);
+    view_settings.set_enable_media_stream(true);
+    view_settings.set_enable_mediasource(true);
+    view_settings.set_enable_webaudio(true);
+    view_settings.set_enable_webgl(true);
+    view_settings.set_enable_webrtc(true);
+
+    let view_session = webkit::NetworkSession::new_ephemeral();
+    view_session.set_tls_errors_policy(webkit::TLSErrorsPolicy::Ignore);
+
+    let cuttlefish_view = webkit::WebView::builder()
+        .hexpand(true)
+        .vexpand(true)
+        .network_session(&view_session)
+        .settings(&view_settings)
+        .build();
+    let cuttlefish_view_scroller = gtk::ScrolledWindow::builder()
+        .hexpand(true)
+        .vexpand(true)
+        .min_content_height(480)
+        .hscrollbar_policy(gtk::PolicyType::Automatic)
+        .vscrollbar_policy(gtk::PolicyType::Automatic)
+        .build();
+    cuttlefish_view_scroller.set_child(Some(&cuttlefish_view));
+
+    let cuttlefish_view_stack = gtk::Stack::builder()
+        .hexpand(true)
+        .vexpand(true)
+        .transition_type(gtk::StackTransitionType::Crossfade)
+        .build();
+    cuttlefish_view_stack.add_named(&cuttlefish_view_placeholder, Some("placeholder"));
+    cuttlefish_view_stack.add_named(&cuttlefish_view_scroller, Some("viewer"));
+    cuttlefish_view_stack.set_visible_child_name("placeholder");
+
+    let cuttlefish_view_box = gtk::Box::new(gtk::Orientation::Vertical, ROW_SPACING);
+    cuttlefish_view_box.append(&embedded_actions);
+    cuttlefish_view_box.append(&cuttlefish_view_stack);
+    let cuttlefish_view_frame = section_frame("Embedded Cuttlefish UI", &cuttlefish_view_box);
+    sections.append(&cuttlefish_view_frame);
 
     let form = gtk::Grid::builder()
         .row_spacing(ROW_SPACING)
@@ -3213,10 +3341,70 @@ pub(crate) fn page_targets(
             .ok();
     });
 
+    let placeholder_label_started = cuttlefish_view_placeholder_label.clone();
+    let viewer_stack_started = cuttlefish_view_stack.clone();
+    cuttlefish_view.connect_load_changed(move |view, event| match event {
+        webkit::LoadEvent::Started => {
+            let uri = view
+                .uri()
+                .map(|uri| uri.to_string())
+                .unwrap_or_else(default_cuttlefish_webrtc_url);
+            placeholder_label_started
+                .set_text(&format!("Loading embedded Cuttlefish UI from {uri}..."));
+        }
+        webkit::LoadEvent::Finished => {
+            viewer_stack_started.set_visible_child_name("viewer");
+        }
+        _ => {}
+    });
+
+    let page_embedded_failure = page.clone();
+    let placeholder_label_failed = cuttlefish_view_placeholder_label.clone();
+    let viewer_stack_failed = cuttlefish_view_stack.clone();
+    let web_url_entry_failed = cuttlefish_web_url_entry.clone();
+    cuttlefish_view.connect_load_failed(move |view, _event, failing_uri, err| {
+        let requested_uri = web_url_entry_failed.text().trim().to_string();
+        let current_uri = view.uri().map(|uri| uri.to_string()).unwrap_or_default();
+        if failing_uri != requested_uri && failing_uri != current_uri {
+            return false;
+        }
+        placeholder_label_failed.set_text(&format!(
+            "Embedded Cuttlefish UI failed to load from {failing_uri}.\n{err}\nUse the Web UI button to open it in your browser or Reload embedded after Cuttlefish is running."
+        ));
+        viewer_stack_failed.set_visible_child_name("placeholder");
+        page_embedded_failure
+            .append(&format!("Embedded Cuttlefish UI load failed ({failing_uri}): {err}\n"));
+        true
+    });
+
+    let cuttlefish_view_reload = cuttlefish_view.clone();
+    let cuttlefish_view_stack_reload = cuttlefish_view_stack.clone();
+    let cuttlefish_view_placeholder_reload = cuttlefish_view_placeholder_label.clone();
+    let cuttlefish_url_reload = cuttlefish_web_url_entry.clone();
+    embedded_reload.connect_clicked(move |_| {
+        let current = cuttlefish_url_reload.text();
+        let url = current.trim();
+        let url = if url.is_empty() {
+            default_cuttlefish_webrtc_url()
+        } else {
+            url.to_string()
+        };
+        cuttlefish_view_placeholder_reload
+            .set_text(&format!("Loading embedded Cuttlefish UI from {url}..."));
+        cuttlefish_view_stack_reload.set_visible_child_name("viewer");
+        cuttlefish_view_reload.load_uri(&url);
+    });
+
     let page_web = page.clone();
+    let cuttlefish_url_browser = cuttlefish_web_url_entry.clone();
     web_ui.connect_clicked(move |_| {
-        let url = std::env::var("AADK_CUTTLEFISH_WEBRTC_URL")
-            .unwrap_or_else(|_| "https://localhost:8443".into());
+        let current = cuttlefish_url_browser.text();
+        let url = current.trim();
+        let url = if url.is_empty() {
+            default_cuttlefish_webrtc_url()
+        } else {
+            url.to_string()
+        };
         match gtk::gio::AppInfo::launch_default_for_uri(&url, None::<&gtk::gio::AppLaunchContext>) {
             Ok(_) => page_web.append(&format!("Opened Cuttlefish UI: {url}\n")),
             Err(err) => page_web.append(&format!("Failed to open Cuttlefish UI: {err}\n")),
@@ -3225,8 +3413,7 @@ pub(crate) fn page_targets(
 
     let page_env = page.clone();
     env_ui.connect_clicked(move |_| {
-        let url = std::env::var("AADK_CUTTLEFISH_ENV_URL")
-            .unwrap_or_else(|_| "https://localhost:1443".into());
+        let url = default_cuttlefish_env_url();
         match gtk::gio::AppInfo::launch_default_for_uri(&url, None::<&gtk::gio::AppLaunchContext>) {
             Ok(_) => page_env.append(&format!("Opened Cuttlefish env control: {url}\n")),
             Err(err) => page_env.append(&format!("Failed to open Cuttlefish env control: {err}\n")),
@@ -3520,11 +3707,15 @@ pub(crate) fn page_targets(
         cuttlefish_stop_button: stop,
         cuttlefish_branch_entry,
         cuttlefish_target_entry,
+        cuttlefish_web_url_entry,
         apk_entry,
         cuttlefish_build_entry: cuttlefish_build_entry.clone(),
         target_entry,
         app_id_entry,
         activity_entry,
+        cuttlefish_view_stack,
+        cuttlefish_view_placeholder_label,
+        cuttlefish_view,
     }
 }
 
