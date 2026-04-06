@@ -110,9 +110,12 @@ Default addresses (override with env vars):
 - ObserveService persists run history and a run output inventory; run records include a summary pointer for output counts and last bundle.
 - RunId is a first-class identifier for multi-service workflows; correlation_id remains a secondary grouping key.
 - JobService StreamRunEvents aggregates run events across jobs using bounded buffering and best-effort timestamp ordering for late discovery.
+- JobService also keeps run-id and correlation-id indexes in memory so StreamRunEvents late discovery does not rescan the full job store on every polling tick.
 - WorkflowService orchestrates workflow.pipeline runs and upserts run records to ObserveService.
 - UI/CLI can export/import local state archives and invoke ReloadState RPCs to rehydrate service state after import.
+- Shared JSON state writes now use unique synced temp files before rename, and state-archive opens stage extracted contents under `state-ops` on the target filesystem while rejecting archives with no restorable APKW entries.
 - UI header New project runs reset-all-state then opens the project folder picker; Open project uses the picker and auto-opens existing projects.
+- UI state snapshots now autosave while the app is open, and the header Save state action flushes a fresh UI snapshot before creating the zip archive.
 
 ## Shared data and locations
 - Job state: ~/.local/share/apkw/state/jobs.json

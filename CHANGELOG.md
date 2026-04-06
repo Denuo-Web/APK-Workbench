@@ -25,11 +25,15 @@ The format is based on Keep a Changelog and the project versioning follows Seman
 - Product copy, package metadata, and UI text now consistently use `APK Workbench` / `APKW` naming instead of scaffold terminology.
 - The Targets page logcat action now streams from the current target field or active target instead of a hard-coded sample device id.
 - `apkw-util` and `apkw-observe` now avoid unnecessary `zip` features to trim packaged binary footprint.
+- `apkw-ui` now snapshots `ui-state.json` incrementally while the app is open and flushes a fresh UI snapshot before the header Save state archive action runs.
+- `apkw-core` now indexes jobs by run id and correlation id so run-event discovery avoids rescanning the entire job store every poll tick.
 
 ### Fixed
 - Release checksum files now record artifact basenames so `sha256sum -c` works after downloading GitHub Release assets.
 - Debian packaging metadata and release docs now account for the WebKitGTK runtime needed by the embedded Cuttlefish pane.
 - Build and release documentation now call out the required WebKitGTK development packages for building `apkw-ui`.
+- State archive restore now stages extracted files under `state-ops` on the target filesystem, rejects archives with no restorable entries, and uses synced unique temp files for JSON state writes to reduce stale-save and restore corruption risks.
+- UI log persistence now trims saved log snapshots without full-string character rescans, reducing log-heavy save overhead.
 
 ### Documentation
 - Repository and service agent notes were synced with the current packaging, toolchain, and UI behavior.
