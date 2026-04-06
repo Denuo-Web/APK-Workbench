@@ -1,47 +1,41 @@
 # Changelog
 
-All notable changes to AADK Full are documented in this file.
+All notable changes to APK Workbench are documented in this file.
 
 The format is based on Keep a Changelog and the project versioning follows Semantic Versioning.
 
 ## [Unreleased]
 
-Changes in this section cover everything merged after `v0.1.0` on 2026-03-10.
+## [0.2.0] - 2026-04-06
 
 ### Added
 - Embedded Cuttlefish WebRTC viewing inside the GTK Targets page using WebKitGTK, including in-app reload support, visible current URL state, and fallback browser handoff.
 - Upstream GitHub release discovery for the custom SDK and NDK providers, including merged availability results, lag checks against the pinned catalog, and support for installing or verifying upstream-only releases when URL and sha256 metadata are available.
-- Debian manpages for `aadk`, `aadk-ui`, and `aadk-cli`.
+- Debian manpages for `apkw`, `apkw-ui`, and `apkw-cli`.
+- Compatibility bridges for legacy `AADK_*` env vars and `.aadk/project.json` metadata so existing setups keep working during the move to `APKW`.
 
 ### Changed
+- Renamed the product from `AADK Full` to `APK Workbench` and moved the workspace package, crate, command, proto, packaging, and documentation surface from `aadk*` to `apkw*`.
+- Commands and package entry points now ship as `apkw`, `apkw-ui`, and `apkw-cli`.
+- State, project metadata, and install layouts now prefer `~/.local/share/apkw`, `.apkw/project.json`, `/usr/lib/apkw`, and `apkw-*` release artifacts.
 - Release packaging now shares version and binary metadata from workspace-level helpers, with common logic centralized in `scripts/release/common.sh`.
-- The dev runner and installed launcher now share Android/Java environment detection through `scripts/release/aadk-env.sh`, keeping `ANDROID_SDK_ROOT`, `ANDROID_HOME`, and `AADK_ADB_PATH` behavior aligned.
-- Debian package staging now installs the payload under `/usr/lib/aadk`, exposes `/usr/bin/aadk`, `/usr/bin/aadk-ui`, and `/usr/bin/aadk-cli` symlinks, validates `PKGNAME`, and strips staged binaries during packaging.
+- The dev runner and installed launcher now share Android/Java environment detection through `scripts/release/apkw-env.sh`, keeping `ANDROID_SDK_ROOT`, `ANDROID_HOME`, and `APKW_ADB_PATH` behavior aligned.
+- Debian package staging now installs the payload under `/usr/lib/apkw`, exposes `/usr/bin/apkw`, `/usr/bin/apkw-ui`, and `/usr/bin/apkw-cli` symlinks, validates `PKGNAME`, and strips staged binaries during packaging.
 - Packaging and README guidance now treat GitHub Releases tarballs plus checksums as the canonical desktop distribution path, with the Debian package kept as an additional convenience artifact.
-- Product copy, package metadata, and UI text now consistently use `AADK` naming instead of scaffold terminology.
+- Product copy, package metadata, and UI text now consistently use `APK Workbench` / `APKW` naming instead of scaffold terminology.
 - The Targets page logcat action now streams from the current target field or active target instead of a hard-coded sample device id.
-- `aadk-util` and `aadk-observe` now avoid unnecessary `zip` features to trim packaged binary footprint.
+- `apkw-util` and `apkw-observe` now avoid unnecessary `zip` features to trim packaged binary footprint.
 
 ### Fixed
+- Release checksum files now record artifact basenames so `sha256sum -c` works after downloading GitHub Release assets.
 - Debian packaging metadata and release docs now account for the WebKitGTK runtime needed by the embedded Cuttlefish pane.
-- Build and release documentation now call out the required WebKitGTK development packages for building `aadk-ui`.
+- Build and release documentation now call out the required WebKitGTK development packages for building `apkw-ui`.
 
 ### Documentation
 - Repository and service agent notes were synced with the current packaging, toolchain, and UI behavior.
 
-### Commit Summary Since v0.1.0
-- `2026-04-03 bc37727` `release: centralize packaging metadata`
-- `2026-04-03 3532432` `branding: remove scaffold terminology`
-- `2026-04-03 0bdcb24` `release: centralize launcher env and deb metadata`
-- `2026-04-03 e37d275` `toolchain: discover upstream SDK and NDK releases`
-- `2026-04-03 9e2ec1e` `docs: sync repo agent notes`
-- `2026-04-03 565f04a` `packaging: clean up Debian install layout`
-- `2026-04-03 2109880` `util: trim zip features for packaged binaries`
-- `2026-04-04 3c4b316` `aadk-ui: embed the Cuttlefish WebRTC view`
-- `2026-04-04 0672182` `packaging: document WebKitGTK requirements`
-
 ## [0.1.0] - 2026-03-10
 
 ### Added
-- Initial tagged `AADK Full` release.
+- Initial tagged `APK Workbench` release.
 - Linux ARM64 release tarball packaging and Debian-first release documentation.

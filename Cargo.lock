@@ -75,7 +75,7 @@ checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
 name = "apkw-build"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "apkw-proto",
  "apkw-telemetry",
@@ -92,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "apkw-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "apkw-proto",
  "apkw-telemetry",
@@ -107,7 +107,7 @@ dependencies = [
 
 [[package]]
 name = "apkw-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "apkw-proto",
  "apkw-telemetry",
@@ -126,7 +126,7 @@ dependencies = [
 
 [[package]]
 name = "apkw-observe"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "apkw-proto",
  "apkw-telemetry",
@@ -145,7 +145,7 @@ dependencies = [
 
 [[package]]
 name = "apkw-project"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "apkw-proto",
  "apkw-telemetry",
@@ -163,7 +163,7 @@ dependencies = [
 
 [[package]]
 name = "apkw-proto"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "prost",
  "prost-types",
@@ -173,7 +173,7 @@ dependencies = [
 
 [[package]]
 name = "apkw-targets"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "apkw-proto",
  "apkw-telemetry",
@@ -191,7 +191,7 @@ dependencies = [
 
 [[package]]
 name = "apkw-telemetry"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -199,7 +199,7 @@ dependencies = [
 
 [[package]]
 name = "apkw-toolchain"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "apkw-proto",
  "apkw-telemetry",
@@ -222,7 +222,7 @@ dependencies = [
 
 [[package]]
 name = "apkw-ui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "apkw-proto",
  "apkw-telemetry",
@@ -239,7 +239,7 @@ dependencies = [
 
 [[package]]
 name = "apkw-util"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "apkw-proto",
  "apkw-telemetry",
@@ -256,7 +256,7 @@ dependencies = [
 
 [[package]]
 name = "apkw-workflow"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "apkw-proto",
  "apkw-telemetry",
