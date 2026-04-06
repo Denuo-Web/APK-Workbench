@@ -1,7 +1,9 @@
 use std::{
-    fs, io,
+    fs,
+    io::{self, Write},
     net::SocketAddr,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
     time::Duration,
 };
 
@@ -27,6 +29,8 @@ pub const DEFAULT_BUILD_ADDR: &str = "127.0.0.1:50054";
 pub const DEFAULT_TARGETS_ADDR: &str = "127.0.0.1:50055";
 pub const DEFAULT_OBSERVE_ADDR: &str = "127.0.0.1:50056";
 pub const DEFAULT_WORKFLOW_ADDR: &str = "127.0.0.1:50057";
+
+static TMP_FILE_SEQ: AtomicU64 = AtomicU64::new(0);
 
 fn legacy_env_key(key: &str) -> Option<String> {
     key.strip_prefix("APKW_")
@@ -134,10 +138,23 @@ pub fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> io::Result<()>
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let tmp = path.with_extension("json.tmp");
+    let tmp = temp_write_path(path);
     let data = serde_json::to_vec_pretty(value).map_err(io::Error::other)?;
-    fs::write(&tmp, data)?;
-    fs::rename(&tmp, path)?;
+    {
+        let mut file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&tmp)?;
+        file.write_all(&data)?;
+        file.sync_all()?;
+    }
+    if let Err(err) = fs::rename(&tmp, path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(err);
+    }
+    if let Some(parent) = path.parent() {
+        sync_dir(parent)?;
+    }
     Ok(())
 }
 
@@ -451,8 +468,10 @@ pub fn open_state_archive(path: &Path, opts: &StateArchiveOptions) -> io::Result
         )));
     }
 
-    let temp_dir = std::env::temp_dir().join(format!("apkw-state-import-{}", now_millis()));
-    fs::create_dir_all(&temp_dir)?;
+    fs::create_dir_all(&base_dir)?;
+    let stage_dir = state_ops_dir().join(format!("open-{}-{}", std::process::id(), now_millis()));
+    let stage_payload_dir = stage_dir.join("payload");
+    fs::create_dir_all(&stage_payload_dir)?;
 
     let file = fs::File::open(path)?;
     let mut archive = zip::ZipArchive::new(file).map_err(io::Error::other)?;
@@ -469,7 +488,7 @@ pub fn open_state_archive(path: &Path, opts: &StateArchiveOptions) -> io::Result
         if should_exclude_rel(&rel, opts) {
             continue;
         }
-        let out_path = temp_dir.join(&rel);
+        let out_path = stage_payload_dir.join(&rel);
         if entry.is_dir() {
             fs::create_dir_all(&out_path)?;
             restored_dirs += 1;
@@ -485,6 +504,14 @@ pub fn open_state_archive(path: &Path, opts: &StateArchiveOptions) -> io::Result
         if let Some(mode) = entry.unix_mode() {
             let _ = fs::set_permissions(&out_path, fs::Permissions::from_mode(mode));
         }
+    }
+
+    if restored_files == 0 && restored_dirs == 0 {
+        let _ = fs::remove_dir_all(&stage_dir);
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "archive did not contain any restorable APKW state entries",
+        ));
     }
 
     let preserved_dirs = preserve_dirs(opts);
@@ -509,14 +536,14 @@ pub fn open_state_archive(path: &Path, opts: &StateArchiveOptions) -> io::Result
         fs::create_dir_all(&base_dir)?;
     }
 
-    for entry in fs::read_dir(&temp_dir)? {
+    for entry in fs::read_dir(&stage_payload_dir)? {
         let entry = entry?;
         let dest = base_dir.join(entry.file_name());
         fs::rename(entry.path(), dest)?;
     }
 
     fs::create_dir_all(state_exports_dir())?;
-    let _ = fs::remove_dir_all(&temp_dir);
+    let _ = fs::remove_dir_all(&stage_dir);
 
     Ok(StateOpenResult {
         restored_files,
@@ -527,6 +554,31 @@ pub fn open_state_archive(path: &Path, opts: &StateArchiveOptions) -> io::Result
 
 fn state_ops_dir() -> PathBuf {
     data_dir().join(STATE_OPS_DIR)
+}
+
+fn temp_write_path(path: &Path) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("state.json");
+    let seq = TMP_FILE_SEQ.fetch_add(1, Ordering::Relaxed);
+    path.parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(format!(
+            ".{file_name}.tmp-{}-{}-{seq}",
+            std::process::id(),
+            now_millis()
+        ))
+}
+
+#[cfg(unix)]
+fn sync_dir(path: &Path) -> io::Result<()> {
+    fs::File::open(path)?.sync_all()
+}
+
+#[cfg(not(unix))]
+fn sync_dir(_path: &Path) -> io::Result<()> {
+    Ok(())
 }
 
 fn with_state_ops_lock<T>(lock_path: &Path, op: impl FnOnce() -> io::Result<T>) -> io::Result<T> {
@@ -694,4 +746,115 @@ fn preserve_dirs(opts: &StateArchiveOptions) -> Vec<String> {
         dirs.push(LARGE_DIR_TELEMETRY.to_string());
     }
     dirs
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        ffi::OsString,
+        sync::{Mutex, OnceLock},
+    };
+
+    fn test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct HomeGuard {
+        previous: Option<OsString>,
+    }
+
+    impl Drop for HomeGuard {
+        fn drop(&mut self) {
+            if let Some(previous) = self.previous.take() {
+                std::env::set_var("HOME", previous);
+            } else {
+                std::env::remove_var("HOME");
+            }
+        }
+    }
+
+    fn set_test_home(path: &Path) -> HomeGuard {
+        let previous = std::env::var_os("HOME");
+        std::env::set_var("HOME", path);
+        HomeGuard { previous }
+    }
+
+    fn test_root(name: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "apkw-util-{name}-{}-{}",
+            std::process::id(),
+            now_millis()
+        ));
+        let _ = fs::remove_dir_all(&path);
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    fn write_zip(path: &Path, entries: &[(&str, &[u8])]) {
+        let file = fs::File::create(path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let options = FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        for (name, contents) in entries {
+            zip.start_file(*name, options).unwrap();
+            zip.write_all(contents).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+
+    #[test]
+    fn open_state_archive_rejects_empty_archives_without_clearing_existing_state() {
+        let _lock = test_lock().lock().unwrap();
+        let home = test_root("empty-open");
+        let _guard = set_test_home(&home);
+
+        let base_dir = data_dir();
+        fs::create_dir_all(base_dir.join("state")).unwrap();
+        let existing_file = base_dir.join("state").join("projects.json");
+        fs::write(&existing_file, br#"{"projects":[{"project_id":"demo"}]}"#).unwrap();
+
+        let archive = home.join("empty.zip");
+        let file = fs::File::create(&archive).unwrap();
+        zip::ZipWriter::new(file).finish().unwrap();
+
+        let err = open_state_archive(&archive, &StateArchiveOptions::default()).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(existing_file.exists());
+
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn open_state_archive_restores_state_from_same_filesystem_staging_area() {
+        let _lock = test_lock().lock().unwrap();
+        let home = test_root("roundtrip-open");
+        let _guard = set_test_home(&home);
+
+        let base_dir = data_dir();
+        fs::create_dir_all(base_dir.join("state")).unwrap();
+        fs::write(base_dir.join("state").join("projects.json"), b"before").unwrap();
+        fs::write(base_dir.join("state").join("observe.json"), b"before").unwrap();
+
+        let archive = home.join("state.zip");
+        write_zip(
+            &archive,
+            &[
+                (
+                    "state/projects.json",
+                    br#"{"projects":[{"project_id":"new"}]}"#,
+                ),
+                ("state/observe.json", br#"{"runs":[],"outputs":[]}"#),
+            ],
+        );
+
+        let result = open_state_archive(&archive, &StateArchiveOptions::default()).unwrap();
+        assert_eq!(result.restored_files, 2);
+        assert_eq!(
+            fs::read_to_string(base_dir.join("state").join("projects.json")).unwrap(),
+            r#"{"projects":[{"project_id":"new"}]}"#
+        );
+
+        let _ = fs::remove_dir_all(home);
+    }
 }
