@@ -45,6 +45,7 @@ completed items or move them into the implementation notes.
 - crates/aadk-telemetry: Opt-in telemetry spooler (usage events + crash reports)
 - crates/aadk-proto: Rust gRPC codegen for proto/aadk/v1
 - proto/aadk/v1/*.proto: gRPC contracts
+- CHANGELOG.md: release notes and post-tag history used for version increment prep
 - scripts/dev/run-all.sh: local dev runner for all services (uses the shared launcher env helper to auto-export ANDROID_SDK_ROOT/ANDROID_HOME and AADK_ADB_PATH when an SDK is detected)
 - scripts/release/common.sh: shared release metadata/helpers (workspace version, supported-host guards, binary list)
 - scripts/release/aadk-env.sh: shared Android/Java environment detection for the dev runner and installed launcher
