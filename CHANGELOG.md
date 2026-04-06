@@ -19,6 +19,7 @@ Changes in this section cover everything merged after `v0.1.0` on 2026-03-10.
 - Debian package staging now installs the payload under `/usr/lib/aadk`, exposes `/usr/bin/aadk`, `/usr/bin/aadk-ui`, and `/usr/bin/aadk-cli` symlinks, validates `PKGNAME`, and strips staged binaries during packaging.
 - Packaging and README guidance now treat GitHub Releases tarballs plus checksums as the canonical desktop distribution path, with the Debian package kept as an additional convenience artifact.
 - Product copy, package metadata, and UI text now consistently use `AADK` naming instead of scaffold terminology.
+- The Targets page logcat action now streams from the current target field or active target instead of a hard-coded sample device id.
 - `aadk-util` and `aadk-observe` now avoid unnecessary `zip` features to trim packaged binary footprint.
 
 ### Fixed

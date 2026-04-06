@@ -48,6 +48,8 @@ Update this file whenever UI behavior changes or when commits touching this crat
 - The Targets page includes an "Open Cuttlefish Env" button using AADK_CUTTLEFISH_ENV_URL (default https://localhost:1443).
 - The Targets page now includes an embedded Cuttlefish WebRTC pane powered by WebKitGTK; it keeps the
   current WebRTC URL visible, reloads in-app, and still offers browser handoff via the existing Web UI button.
+- The Targets quick action for logcat now streams from the current Target id field (or active target)
+  instead of using a hard-coded sample device id.
 - Observe export requests include optional metadata fields (project/target/toolchain ids), currently unset in the UI.
 - Toolchains/Projects/Targets/Build/Evidence pages include a "Use job id" toggle plus
   correlation id entry to attach work to existing jobs and grouped workflows; the UI derives run_id

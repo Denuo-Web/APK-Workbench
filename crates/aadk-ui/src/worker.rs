@@ -3594,6 +3594,19 @@ pub(crate) async fn handle_command(
             target_id,
             filter,
         } => {
+            let target_id = if target_id.trim().is_empty() {
+                cfg.active_target_id.trim().to_string()
+            } else {
+                target_id.trim().to_string()
+            };
+            if target_id.is_empty() {
+                ui.send(AppEvent::Log {
+                    page: "targets",
+                    line: "Logcat streaming requires a target id.\n".into(),
+                })
+                .ok();
+                return Ok(());
+            }
             ui.send(AppEvent::Log {
                 page: "targets",
                 line: format!(

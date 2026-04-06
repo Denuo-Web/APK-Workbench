@@ -3026,9 +3026,9 @@ pub(crate) fn page_targets(
 
     let row = gtk::Box::new(gtk::Orientation::Horizontal, ROW_SPACING);
     let list = gtk::Button::with_label("List targets");
-    let stream = gtk::Button::with_label("Stream logcat (sample)");
+    let stream = gtk::Button::with_label("Stream logcat");
     set_tooltip(&list, "What: List registered targets. Why: discover target ids and status. How: click to query TargetService.");
-    set_tooltip(&stream, "What: Stream sample logcat output. Why: verify log streaming from a target. How: click to start a sample stream (uses target-sample-pixel).");
+    set_tooltip(&stream, "What: Stream logcat from the current target. Why: inspect device output without leaving the Targets page. How: set Target id below or keep the default target, then click.");
     row.append(&list);
     row.append(&stream);
     let quick_actions_frame = section_frame("Quick actions", &row);
@@ -3304,12 +3304,13 @@ pub(crate) fn page_targets(
 
     let cfg_stream = cfg.clone();
     let cmd_tx_stream = cmd_tx.clone();
+    let target_entry_stream = target_entry.clone();
     stream.connect_clicked(move |_| {
         let cfg = cfg_stream.lock().unwrap().clone();
         cmd_tx_stream
             .try_send(UiCommand::TargetsStreamLogcat {
                 cfg,
-                target_id: "target-sample-pixel".into(),
+                target_id: target_entry_stream.text().to_string(),
                 filter: "".into(),
             })
             .ok();
