@@ -7,5 +7,5 @@ Maintainer: @MAINTAINER@
 Depends: libc6, libgtk-4-1, libwebkitgtk-6.0-4
 Recommends: @JAVA_RUNTIME_RECOMMENDS@
 Description: @SUMMARY@
- AADK provides a GTK UI plus gRPC services for toolchain,
+ APKW provides a GTK UI plus gRPC services for toolchain,
  project, build, targets, workflows, and job monitoring.

@@ -1,18 +1,18 @@
 [workspace]
 resolver = "2"
 members = [
-  "crates/aadk-util",
-  "crates/aadk-telemetry",
-  "crates/aadk-proto",
-  "crates/aadk-core",
-  "crates/aadk-workflow",
-  "crates/aadk-toolchain",
-  "crates/aadk-project",
-  "crates/aadk-build",
-  "crates/aadk-targets",
-  "crates/aadk-observe",
-  "crates/aadk-ui",
-  "crates/aadk-cli",
+  "crates/apkw-util",
+  "crates/apkw-telemetry",
+  "crates/apkw-proto",
+  "crates/apkw-core",
+  "crates/apkw-workflow",
+  "crates/apkw-toolchain",
+  "crates/apkw-project",
+  "crates/apkw-build",
+  "crates/apkw-targets",
+  "crates/apkw-observe",
+  "crates/apkw-ui",
+  "crates/apkw-cli",
 ]
 
 [workspace.package]

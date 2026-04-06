@@ -1,8 +1,8 @@
-[![AADK UI demo](docs/ARM64.gif)](docs/ARM64.mp4)
+[![APK Workbench UI demo](docs/ARM64.gif)](docs/ARM64.mp4)
 
-# AADK Full
+# APK Workbench
 
-GUI-first, multi-service gRPC platform for an Android DevKit style workflow. The GTK UI and CLI
+GUI-first, multi-service gRPC platform for Android development workflows. The GTK UI and CLI
 are thin clients; all real work lives in the service crates. JobService is the event bus that
 streams job state/progress/logs to clients.
 
@@ -11,7 +11,7 @@ streams job state/progress/logs to clients.
 - Debian 13 on Linux ARM64 is the primary validated distro for full-stack support, release smoke tests,
   and Cuttlefish host-tool automation.
 - Non-Debian Linux ARM64 hosts are experimental for the full stack and generally require explicit
-  overrides such as `AADK_CUTTLEFISH_INSTALL_CMD`.
+  overrides such as `APKW_CUTTLEFISH_INSTALL_CMD`.
 - x86_64 is intentionally out of scope because Android Studio already covers it.
 - Toolchain catalog includes Linux ARM64 SDK/NDK artifacts plus Windows ARM64 NDK artifacts (r29/r28c/r27d);
   no darwin SDK/NDK artifacts are published in the custom catalogs.
@@ -25,48 +25,48 @@ streams job state/progress/logs to clients.
 - WorkflowService orchestrates multi-step pipelines and upserts run records for observability.
 
 ## Source map (main entry points)
-- JobService: `crates/aadk-core/src/main.rs`
-- WorkflowService: `crates/aadk-workflow/src/main.rs`
-- ToolchainService: `crates/aadk-toolchain/src/main.rs`
-- ProjectService: `crates/aadk-project/src/main.rs`
-- BuildService: `crates/aadk-build/src/main.rs`
-- TargetService: `crates/aadk-targets/src/main.rs`
-- ObserveService: `crates/aadk-observe/src/main.rs`
-- GTK UI: `crates/aadk-ui/src/main.rs`
-- CLI: `crates/aadk-cli/src/main.rs`
-- Proto contracts: `proto/aadk/v1`
-- Rust gRPC types: `crates/aadk-proto`
+- JobService: `crates/apkw-core/src/main.rs`
+- WorkflowService: `crates/apkw-workflow/src/main.rs`
+- ToolchainService: `crates/apkw-toolchain/src/main.rs`
+- ProjectService: `crates/apkw-project/src/main.rs`
+- BuildService: `crates/apkw-build/src/main.rs`
+- TargetService: `crates/apkw-targets/src/main.rs`
+- ObserveService: `crates/apkw-observe/src/main.rs`
+- GTK UI: `crates/apkw-ui/src/main.rs`
+- CLI: `crates/apkw-cli/src/main.rs`
+- Proto contracts: `proto/apkw/v1`
+- Rust gRPC types: `crates/apkw-proto`
 - Dev runner: `scripts/dev/run-all.sh`
 - Agent notes: `AGENTS.md` and `crates/*/AGENTS.md`
 
 ## Runtime topology
 Default addresses (override via env):
-- Job/Core:     127.0.0.1:50051 (AADK_JOB_ADDR)
-- Toolchain:    127.0.0.1:50052 (AADK_TOOLCHAIN_ADDR)
-- Project:      127.0.0.1:50053 (AADK_PROJECT_ADDR)
-- Build:        127.0.0.1:50054 (AADK_BUILD_ADDR)
-- Targets:      127.0.0.1:50055 (AADK_TARGETS_ADDR)
-- Observe:      127.0.0.1:50056 (AADK_OBSERVE_ADDR)
-- Workflow:     127.0.0.1:50057 (AADK_WORKFLOW_ADDR)
+- Job/Core:     127.0.0.1:50051 (APKW_JOB_ADDR)
+- Toolchain:    127.0.0.1:50052 (APKW_TOOLCHAIN_ADDR)
+- Project:      127.0.0.1:50053 (APKW_PROJECT_ADDR)
+- Build:        127.0.0.1:50054 (APKW_BUILD_ADDR)
+- Targets:      127.0.0.1:50055 (APKW_TARGETS_ADDR)
+- Observe:      127.0.0.1:50056 (APKW_OBSERVE_ADDR)
+- Workflow:     127.0.0.1:50057 (APKW_WORKFLOW_ADDR)
 
 ## Data and state locations
-- Jobs: `~/.local/share/aadk/state/jobs.json`
-- UI config: `~/.local/share/aadk/state/ui-config.json`
-- CLI config: `~/.local/share/aadk/state/cli-config.json`
-- Toolchains: `~/.local/share/aadk/state/toolchains.json`
-- Toolchain downloads: `~/.local/share/aadk/downloads`
-- Toolchain installs: `~/.local/share/aadk/toolchains`
-- Projects: `~/.local/share/aadk/state/projects.json`
-- Project metadata: `<project>/.aadk/project.json`
-- Builds: `~/.local/share/aadk/state/builds.json`
-- Observe runs: `~/.local/share/aadk/state/observe.json`
-- Observe bundles: `~/.local/share/aadk/bundles`
-- UI/CLI log exports: `~/.local/share/aadk/state/*-job-export-*.json`
+- Jobs: `~/.local/share/apkw/state/jobs.json`
+- UI config: `~/.local/share/apkw/state/ui-config.json`
+- CLI config: `~/.local/share/apkw/state/cli-config.json`
+- Toolchains: `~/.local/share/apkw/state/toolchains.json`
+- Toolchain downloads: `~/.local/share/apkw/downloads`
+- Toolchain installs: `~/.local/share/apkw/toolchains`
+- Projects: `~/.local/share/apkw/state/projects.json`
+- Project metadata: `<project>/.apkw/project.json`
+- Builds: `~/.local/share/apkw/state/builds.json`
+- Observe runs: `~/.local/share/apkw/state/observe.json`
+- Observe bundles: `~/.local/share/apkw/bundles`
+- UI/CLI log exports: `~/.local/share/apkw/state/*-job-export-*.json`
 
 ## Third-party inventory (downloaded on demand)
 This repo does not bundle third-party toolchains; services download or invoke them when requested.
-- Android SDK/NDK custom archives (ToolchainService catalog in `crates/aadk-toolchain/catalog.json`,
-  override with `AADK_TOOLCHAIN_CATALOG`):
+- Android SDK/NDK custom archives (ToolchainService catalog in `crates/apkw-toolchain/catalog.json`,
+  override with `APKW_TOOLCHAIN_CATALOG`):
   - SDK (aarch64-linux-musl):
     - 36.0.0 (2025-11-19): `https://github.com/HomuHomu833/android-sdk-custom/releases/download/36.0.0/android-sdk-aarch64-linux-musl.tar.xz`
     - 35.0.2 (2025-10-11): `https://github.com/HomuHomu833/android-sdk-custom/releases/download/35.0.2/android-sdk-aarch64-linux-musl.tar.xz`
@@ -97,7 +97,7 @@ This repo does not bundle third-party toolchains; services download or invoke th
   - These repos are MIT licensed; review upstream Android SDK/NDK terms if you plan to redistribute.
 - Cuttlefish host tools install uses the android-cuttlefish apt repo on Debian/Ubuntu by default
   (`https://us-apt.pkg.dev/projects/android-cuttlefish-artifacts`); Debian 13 is the validated
-  path, and other distros require `AADK_CUTTLEFISH_INSTALL_CMD`.
+  path, and other distros require `APKW_CUTTLEFISH_INSTALL_CMD`.
 - Cuttlefish images from `ci.android.com` / `android-ci.googleusercontent.com`.
 - Gradle via `gradlew` or system `gradle`.
 - adb/platform-tools from the Android SDK or Cuttlefish host tools.
@@ -118,7 +118,7 @@ sudo apt install -y \
   xz-utils zstd
 ```
 
-`libwebkitgtk-6.0-dev` is required to build `aadk-ui` now that the Targets page
+`libwebkitgtk-6.0-dev` is required to build `apkw-ui` now that the Targets page
 embeds the Cuttlefish WebRTC view inside the GTK app.
 
 ### 2) Rust toolchain (if needed)
@@ -141,53 +141,53 @@ Terminal A:
 
 Override any address with env vars:
 ```bash
-AADK_JOB_ADDR=127.0.0.1:60051 ./scripts/dev/run-all.sh
+APKW_JOB_ADDR=127.0.0.1:60051 ./scripts/dev/run-all.sh
 ```
 
 ### 5) Run the GUI
 Terminal B:
 ```bash
-cargo run -p aadk-ui
+cargo run -p apkw-ui
 ```
 
 If you see a GTK warning about the accessibility bus on minimal installs, either install
 `at-spi2-core` or suppress it for local dev:
 ```bash
-GTK_A11Y=none cargo run -p aadk-ui
+GTK_A11Y=none cargo run -p apkw-ui
 ```
 
 ### 6) Optional: CLI sanity checks
 ```bash
-cargo run -p aadk-cli -- toolchain list-providers
-cargo run -p aadk-cli -- toolchain list-sets
-cargo run -p aadk-cli -- targets list
-cargo run -p aadk-cli -- observe list-runs
-cargo run -p aadk-cli -- observe export-support
-cargo run -p aadk-cli -- project use-active-defaults <project_id>
+cargo run -p apkw-cli -- toolchain list-providers
+cargo run -p apkw-cli -- toolchain list-sets
+cargo run -p apkw-cli -- targets list
+cargo run -p apkw-cli -- observe list-runs
+cargo run -p apkw-cli -- observe export-support
+cargo run -p apkw-cli -- project use-active-defaults <project_id>
 ```
 
 ## Release builds (Linux aarch64)
 Build all workspace binaries:
 ```bash
 cargo build --release --workspace
-ls -1 target/release/aadk-*
+ls -1 target/release/apkw-*
 ```
 
 Primary GitHub Releases artifact:
 ```bash
 VERSION=0.1.0
-OUT=dist/aadk-${VERSION}-linux-aarch64
+OUT=dist/apkw-${VERSION}-linux-aarch64
 mkdir -p "${OUT}"
-cp target/release/aadk-{core,workflow,toolchain,project,build,targets,observe,ui,cli} "${OUT}/"
-cp scripts/release/aadk-start.sh "${OUT}/aadk-start.sh"
-cp scripts/release/aadk-env.sh "${OUT}/aadk-env.sh"
+cp target/release/apkw-{core,workflow,toolchain,project,build,targets,observe,ui,cli} "${OUT}/"
+cp scripts/release/apkw-start.sh "${OUT}/apkw-start.sh"
+cp scripts/release/apkw-env.sh "${OUT}/apkw-env.sh"
 cp README.md LICENSE "${OUT}/"
-tar -C dist -czf "aadk-${VERSION}-linux-aarch64.tar.gz" "aadk-${VERSION}-linux-aarch64"
-sha256sum "aadk-${VERSION}-linux-aarch64.tar.gz" > "aadk-${VERSION}-linux-aarch64.tar.gz.sha256"
+tar -C dist -czf "apkw-${VERSION}-linux-aarch64.tar.gz" "apkw-${VERSION}-linux-aarch64"
+sha256sum "apkw-${VERSION}-linux-aarch64.tar.gz" > "apkw-${VERSION}-linux-aarch64.tar.gz.sha256"
 ```
 
-Upload `aadk-${VERSION}-linux-aarch64.tar.gz` and its `.sha256` file to a GitHub Release.
-GitHub Packages is not used for native AADK desktop binaries.
+Upload `apkw-${VERSION}-linux-aarch64.tar.gz` and its `.sha256` file to a GitHub Release.
+GitHub Packages is not used for native APKW desktop binaries.
 
 Optional Debian convenience package:
 ```bash
@@ -199,7 +199,7 @@ scripted flows.
 
 ## What is implemented today
 
-### JobService (aadk-core)
+### JobService (apkw-core)
 - Persisted job registry with bounded history, retention cleanup, and broadcast streaming.
 - `include_history` replay followed by live event streaming.
 - StreamRunEvents aggregates run events across jobs with bounded buffering and best-effort timestamp ordering.
@@ -207,28 +207,28 @@ scripted flows.
 - Validates job types and reserves workflow.pipeline for multi-step orchestration.
 - Supports run_id + correlation_id grouping (StartJob + ListJobs filter).
 
-### ToolchainService (aadk-toolchain)
-- Provider catalog with host-aware artifacts (override via `AADK_TOOLCHAIN_CATALOG`).
+### ToolchainService (apkw-toolchain)
+- Provider catalog with host-aware artifacts (override via `APKW_TOOLCHAIN_CATALOG`).
 - Installs, updates, uninstalls, and verifies SDK/NDK toolchains with JobService events; supports cache cleanup.
-- Verification validates provenance, catalog entries, artifact size, signatures and transparency log entries (when configured), and layout; supports fixture archives via `AADK_TOOLCHAIN_FIXTURES_DIR`.
+- Verification validates provenance, catalog entries, artifact size, signatures and transparency log entries (when configured), and layout; supports fixture archives via `APKW_TOOLCHAIN_FIXTURES_DIR`.
 
-### ProjectService (aadk-project)
-- Template registry backed by JSON (`AADK_PROJECT_TEMPLATES` or default registry).
+### ProjectService (apkw-project)
+- Template registry backed by JSON (`APKW_PROJECT_TEMPLATES` or default registry).
 - Template defaults (minSdk/compileSdk) resolved from registry/Gradle files with schema validation.
 - Create/open project, create files on disk, store metadata and recents.
 - Exposes GetProject for authoritative project resolution.
 
-### BuildService (aadk-build)
+### BuildService (apkw-build)
 - Resolves project paths via ProjectService IDs (or accepts direct paths) and persists build/artifact records with module/variant/task selections.
 - Runs Gradle with wrapper checks and GRADLE_USER_HOME defaults; validates module/variant via Gradle model introspection and streams logs.
 - Scans build outputs for APK/AAB/AAR/mapping/test results, parses output metadata, tags metadata (module/variant/build_type/flavors/abi/density/task/artifact_type), and supports artifact filters with sha256.
 - When run_id is provided, build artifacts are recorded as ObserveService run outputs for dashboards.
 
-### TargetService (aadk-targets)
+### TargetService (apkw-targets)
 - Enumerates targets via provider pipeline (ADB + Cuttlefish), normalizes IDs, enriches health metadata, and persists inventory + default target.
 - Install APK, launch/stop app, stream logcat, and manage Cuttlefish; publishes job events.
 
-### ObserveService (aadk-observe)
+### ObserveService (apkw-observe)
 - Persists run history and output inventory (bundles/artifacts) with run_id/correlation_id and project/target/toolchain ids.
 - Exports support/evidence bundles as JobService jobs with progress/log streaming and retention.
 - Support bundles include job log history plus config/state snapshots.
@@ -236,13 +236,13 @@ scripted flows.
 - UpsertRun supports best-effort run tracking from multi-service pipelines.
 - ListRunOutputs exposes bundle/artifact inventory with run output summary pointers (counts, last updated, last bundle id).
 
-### WorkflowService (aadk-workflow)
+### WorkflowService (apkw-workflow)
 - Runs workflow.pipeline to orchestrate project creation/opening, toolchain verify, build, install, launch, and bundle export steps.
 - Emits job progress/logs for each step and waits for step jobs to complete before proceeding.
 - Uses run_id to correlate jobs and upserts run records to ObserveService.
 - Build steps upsert artifact outputs to ObserveService so run dashboards list outputs.
 
-### GTK UI (aadk-ui)
+### GTK UI (apkw-ui)
 - Home: run jobs with type/params/ids, watch streams, live status panel.
 - Workflow: run workflow.pipeline with step inputs and stream run-level events.
 - Job History: list jobs and event history with filters; export logs.
@@ -253,7 +253,7 @@ scripted flows.
 - Evidence: list runs, list outputs with filters, group jobs by run, stream run events, export support/evidence bundles, and export job logs.
 - Workflow/Toolchains/Projects/Targets/Console/Evidence pages include job_id reuse and correlation_id inputs for multi-job workflows.
 
-### CLI (aadk-cli)
+### CLI (apkw-cli)
 - Job run/list/watch/history/export/cancel + watch-run (aggregated run stream).
 - Toolchain list-providers/list-sets/update/uninstall/cleanup-cache.
 - Targets list/start/stop/status/install Cuttlefish.
@@ -272,10 +272,10 @@ scripted flows.
 ## Development notes
 - gRPC uses TCP loopback for simplicity; Unix domain sockets are a straightforward follow-on.
 - UI uses a background tokio runtime to keep the GTK main thread responsive.
-- Job workflows publish progress metrics via JobService; run `aadk-core` to see UI streams.
+- Job workflows publish progress metrics via JobService; run `apkw-core` to see UI streams.
 
-## Why AADK (ARM64 gap)
-AADK targets efficient, ARM64-first Android development tooling (not an IDE clone), because the
+## Why APK Workbench (ARM64 gap)
+APK Workbench targets efficient, ARM64-first Android development tooling (not an IDE clone), because the
 official Android Studio stack does not cover ARM64 hosts today.
 
 Primary sources behind this gap:
@@ -303,7 +303,7 @@ Prerequisites (per Android Cuttlefish docs):
 - Ensure the user is in `kvm`, `cvdnetwork`, and `render` groups; re-login or reboot after group changes.
 - Host tools and images should come from the same build id (Install Cuttlefish enforces this).
 - Debian 13 is the validated host path for the default android-cuttlefish apt install; other
-  distros require `AADK_CUTTLEFISH_INSTALL_CMD` and are currently experimental.
+  distros require `APKW_CUTTLEFISH_INSTALL_CMD` and are currently experimental.
 
 Defaults (when not overridden):
 - Branch: `aosp-android-latest-release` for 4K hosts; `main-16k-with-phones` for 16K.
@@ -312,21 +312,21 @@ Defaults (when not overridden):
 GPU acceleration:
 - Android 11+ guests use accelerated graphics when the host supports it; otherwise SwiftShader is used.
 - Host requirements: EGL driver with `GL_KHR_surfaceless_context`, OpenGL ES, and Vulkan support.
-- Use `AADK_CUTTLEFISH_GPU_MODE=gfxstream` (OpenGL+Vulkan passthrough) or `AADK_CUTTLEFISH_GPU_MODE=drm_virgl` (OpenGL only) to set `--gpu_mode=...` when starting.
+- Use `APKW_CUTTLEFISH_GPU_MODE=gfxstream` (OpenGL+Vulkan passthrough) or `APKW_CUTTLEFISH_GPU_MODE=drm_virgl` (OpenGL only) to set `--gpu_mode=...` when starting.
 
 WebRTC streaming:
-- Launch with `--start_webrtc=true` (TargetService sets this automatically when "show full UI" is selected; override via `AADK_CUTTLEFISH_START_ARGS`).
-- Web UI is available at `https://localhost:8443` by default (`AADK_CUTTLEFISH_WEBRTC_URL` overrides).
+- Launch with `--start_webrtc=true` (TargetService sets this automatically when "show full UI" is selected; override via `APKW_CUTTLEFISH_START_ARGS`).
+- Web UI is available at `https://localhost:8443` by default (`APKW_CUTTLEFISH_WEBRTC_URL` overrides).
 - Remote access requires firewall access for TCP 8443 and TCP/UDP 15550-15599.
-- Standalone smoke test (outside AADK):
-  - `HOME="$HOME/.local/share/aadk/cuttlefish/16k" cvd reset -y`
-  - `HOME="$HOME/.local/share/aadk/cuttlefish/16k" "$HOME/.local/share/aadk/cuttlefish/16k/bin/launch_cvd" --daemon --system_image_dir="$HOME/.local/share/aadk/cuttlefish/16k" --report_anonymous_usage_stats=n --start_webrtc=true --enable_tap_devices=false`
-  - `"$HOME/.local/share/aadk/cuttlefish/16k/bin/adb" connect 0.0.0.0:6520 && "$HOME/.local/share/aadk/cuttlefish/16k/bin/adb" -s 0.0.0.0:6520 get-state` should print `device`.
+- Standalone smoke test (outside APKW):
+  - `HOME="$HOME/.local/share/apkw/cuttlefish/16k" cvd reset -y`
+  - `HOME="$HOME/.local/share/apkw/cuttlefish/16k" "$HOME/.local/share/apkw/cuttlefish/16k/bin/launch_cvd" --daemon --system_image_dir="$HOME/.local/share/apkw/cuttlefish/16k" --report_anonymous_usage_stats=n --start_webrtc=true --enable_tap_devices=false`
+  - `"$HOME/.local/share/apkw/cuttlefish/16k/bin/adb" connect 0.0.0.0:6520 && "$HOME/.local/share/apkw/cuttlefish/16k/bin/adb" -s 0.0.0.0:6520 get-state` should print `device`.
   - `curl -k https://localhost:8443/devices` should list `cvd-1`.
-  - Stop with `HOME="$HOME/.local/share/aadk/cuttlefish/16k" "$HOME/.local/share/aadk/cuttlefish/16k/bin/stop_cvd"`.
+  - Stop with `HOME="$HOME/.local/share/apkw/cuttlefish/16k" "$HOME/.local/share/apkw/cuttlefish/16k/bin/stop_cvd"`.
 
 Environment control (REST/CLI):
-- REST endpoint: `https://localhost:1443` (`AADK_CUTTLEFISH_ENV_URL` overrides).
+- REST endpoint: `https://localhost:1443` (`APKW_CUTTLEFISH_ENV_URL` overrides).
 - Example REST paths:
   - `GET /devices/DEVICE_ID/services`
   - `GET /devices/DEVICE_ID/services/SERVICE_NAME`
@@ -340,10 +340,10 @@ Wi-Fi:
 - OpenWRT AP: default device id is `cvd-1`; default WAN IP is `192.168.94.2` or `192.168.96.2` when no launch options are provided.
 - OpenWRT access: `ssh root@OPENWRT_WAN_IP_ADDRESS` or `https://localhost:1443/devices/DEVICE_ID/openwrt`.
 - If launcher logs show `failed to open tap device ... Operation not permitted`, host TAP setup is blocked.
-  Use `--enable_tap_devices=false` (or `AADK_CUTTLEFISH_START_ARGS=--enable_tap_devices=false`) to boot without TAP-backed networking.
+  Use `--enable_tap_devices=false` (or `APKW_CUTTLEFISH_START_ARGS=--enable_tap_devices=false`) to boot without TAP-backed networking.
   This keeps WebRTC + adb working but disables bridged Wi-Fi/OpenWRT networking features.
-  AADK auto-detects this condition and applies `--enable_tap_devices=false` unless an explicit
-  `--enable_tap_devices=...` flag is already present in `AADK_CUTTLEFISH_START_ARGS`.
+  APKW auto-detects this condition and applies `--enable_tap_devices=false` unless an explicit
+  `--enable_tap_devices=...` flag is already present in `APKW_CUTTLEFISH_START_ARGS`.
 
 Bluetooth:
 - Rootcanal is controlled from the Web UI command console.
@@ -353,47 +353,47 @@ Bluetooth:
 - Device types: `beacon`, `scripted_beacon`, `keyboard`, `loopback`, `sniffer`.
 
 Configuration (env vars):
-- `AADK_CUTTLEFISH_ENABLE=0` to disable detection
-- `AADK_CVD_BIN=/path/to/cvd` to override the `cvd` command
-- `AADK_LAUNCH_CVD_BIN=/path/to/launch_cvd` to override the launch command
-- `AADK_STOP_CVD_BIN=/path/to/stop_cvd` to override the stop command
-- `AADK_CUTTLEFISH_ADB_SERIAL=127.0.0.1:6520` to override the adb serial
-- `AADK_CUTTLEFISH_CONNECT=0` to skip `adb connect`
-- `AADK_CUTTLEFISH_WEBRTC_URL=https://localhost:8443` to override the WebRTC viewer URL
-- `AADK_CUTTLEFISH_ENV_URL=https://localhost:1443` to override the environment control endpoint
-- `AADK_CUTTLEFISH_PAGE_SIZE_CHECK=0` to skip the kernel page-size preflight check
-- `AADK_CUTTLEFISH_KVM_CHECK=0` to skip the KVM availability/access check
-- `AADK_CUTTLEFISH_GPU_MODE=gfxstream|drm_virgl` to set the GPU acceleration mode
-- `AADK_CUTTLEFISH_HOME=/path` (or `_16K`/`_4K`) to set the base Cuttlefish home directory
-- `AADK_CUTTLEFISH_IMAGES_DIR=/path` (or `_16K`/`_4K`) to override the images directory
-- `AADK_CUTTLEFISH_HOST_DIR=/path` (or `_16K`/`_4K`) to override the host tools directory
-- `AADK_CUTTLEFISH_START_CMD="..."` to override the start command
-- `AADK_CUTTLEFISH_START_ARGS="..."` to append args to `cvd start`/`launch_cvd`
-- `AADK_CUTTLEFISH_AUTO_RESOURCES=1|0` to enable/disable host-based auto CPU/RAM limits (default `1`)
-- `AADK_CUTTLEFISH_CPUS=<n>` to force `--cpus=<n>` when start args do not already define CPU count
-- `AADK_CUTTLEFISH_MEMORY_MB=<mb>` to force `--memory_mb=<mb>` when start args do not already define memory
-- `AADK_CUTTLEFISH_AUTO_DISPLAY=1|0` to enable/disable host-based display sizing (default `1`)
-- `AADK_CUTTLEFISH_X_RES=<px>` to force `--x_res=<px>` when start args do not already define display width
-- `AADK_CUTTLEFISH_Y_RES=<px>` to force `--y_res=<px>` when start args do not already define display height
-- `AADK_CUTTLEFISH_DPI=<n>` to force `--dpi=<n>` when start args do not already define display density
-- `AADK_CUTTLEFISH_TAP_MODE=auto|enabled|disabled` to control TAP probing behavior (`auto` default)
-- `AADK_CUTTLEFISH_ENABLE_TAP=1|0` legacy alias for enabling/disabling TAP mode
-- `AADK_CUTTLEFISH_STOP_CMD="..."` to override the stop command
-- `AADK_CUTTLEFISH_INSTALL_CMD="..."` to override the host install command (required on non-Debian hosts; non-Debian full-stack support is experimental)
-- `AADK_CUTTLEFISH_INSTALL_HOST=0` to skip host package installation
-- `AADK_CUTTLEFISH_INSTALL_IMAGES=0` to skip image downloads
-- `AADK_CUTTLEFISH_ADD_GROUPS=0` to skip adding the user to kvm/cvdnetwork/render
-- `AADK_CUTTLEFISH_BRANCH=<branch>` (or `_16K`/`_4K`) to override the AOSP branch used for image fetch
-- `AADK_CUTTLEFISH_TARGET=<target>` (or `_16K`/`_4K`) to override the AOSP target used for image fetch
-- `AADK_CUTTLEFISH_BUILD_ID=<id>` to pin a specific AOSP build id
-- `AADK_ADB_PATH` or `ANDROID_SDK_ROOT` to locate `adb`
+- `APKW_CUTTLEFISH_ENABLE=0` to disable detection
+- `APKW_CVD_BIN=/path/to/cvd` to override the `cvd` command
+- `APKW_LAUNCH_CVD_BIN=/path/to/launch_cvd` to override the launch command
+- `APKW_STOP_CVD_BIN=/path/to/stop_cvd` to override the stop command
+- `APKW_CUTTLEFISH_ADB_SERIAL=127.0.0.1:6520` to override the adb serial
+- `APKW_CUTTLEFISH_CONNECT=0` to skip `adb connect`
+- `APKW_CUTTLEFISH_WEBRTC_URL=https://localhost:8443` to override the WebRTC viewer URL
+- `APKW_CUTTLEFISH_ENV_URL=https://localhost:1443` to override the environment control endpoint
+- `APKW_CUTTLEFISH_PAGE_SIZE_CHECK=0` to skip the kernel page-size preflight check
+- `APKW_CUTTLEFISH_KVM_CHECK=0` to skip the KVM availability/access check
+- `APKW_CUTTLEFISH_GPU_MODE=gfxstream|drm_virgl` to set the GPU acceleration mode
+- `APKW_CUTTLEFISH_HOME=/path` (or `_16K`/`_4K`) to set the base Cuttlefish home directory
+- `APKW_CUTTLEFISH_IMAGES_DIR=/path` (or `_16K`/`_4K`) to override the images directory
+- `APKW_CUTTLEFISH_HOST_DIR=/path` (or `_16K`/`_4K`) to override the host tools directory
+- `APKW_CUTTLEFISH_START_CMD="..."` to override the start command
+- `APKW_CUTTLEFISH_START_ARGS="..."` to append args to `cvd start`/`launch_cvd`
+- `APKW_CUTTLEFISH_AUTO_RESOURCES=1|0` to enable/disable host-based auto CPU/RAM limits (default `1`)
+- `APKW_CUTTLEFISH_CPUS=<n>` to force `--cpus=<n>` when start args do not already define CPU count
+- `APKW_CUTTLEFISH_MEMORY_MB=<mb>` to force `--memory_mb=<mb>` when start args do not already define memory
+- `APKW_CUTTLEFISH_AUTO_DISPLAY=1|0` to enable/disable host-based display sizing (default `1`)
+- `APKW_CUTTLEFISH_X_RES=<px>` to force `--x_res=<px>` when start args do not already define display width
+- `APKW_CUTTLEFISH_Y_RES=<px>` to force `--y_res=<px>` when start args do not already define display height
+- `APKW_CUTTLEFISH_DPI=<n>` to force `--dpi=<n>` when start args do not already define display density
+- `APKW_CUTTLEFISH_TAP_MODE=auto|enabled|disabled` to control TAP probing behavior (`auto` default)
+- `APKW_CUTTLEFISH_ENABLE_TAP=1|0` legacy alias for enabling/disabling TAP mode
+- `APKW_CUTTLEFISH_STOP_CMD="..."` to override the stop command
+- `APKW_CUTTLEFISH_INSTALL_CMD="..."` to override the host install command (required on non-Debian hosts; non-Debian full-stack support is experimental)
+- `APKW_CUTTLEFISH_INSTALL_HOST=0` to skip host package installation
+- `APKW_CUTTLEFISH_INSTALL_IMAGES=0` to skip image downloads
+- `APKW_CUTTLEFISH_ADD_GROUPS=0` to skip adding the user to kvm/cvdnetwork/render
+- `APKW_CUTTLEFISH_BRANCH=<branch>` (or `_16K`/`_4K`) to override the AOSP branch used for image fetch
+- `APKW_CUTTLEFISH_TARGET=<target>` (or `_16K`/`_4K`) to override the AOSP target used for image fetch
+- `APKW_CUTTLEFISH_BUILD_ID=<id>` to pin a specific AOSP build id
+- `APKW_ADB_PATH` or `ANDROID_SDK_ROOT` to locate `adb`
 
 ### Pinning Cuttlefish builds
-To pin images to a known build, set `AADK_CUTTLEFISH_BUILD_ID` (optionally with branch/target):
+To pin images to a known build, set `APKW_CUTTLEFISH_BUILD_ID` (optionally with branch/target):
 ```bash
-AADK_CUTTLEFISH_BRANCH=aosp-android-latest-release \
-AADK_CUTTLEFISH_TARGET=aosp_cf_arm64_only_phone-userdebug \
-AADK_CUTTLEFISH_BUILD_ID=12345678 \
+APKW_CUTTLEFISH_BRANCH=aosp-android-latest-release \
+APKW_CUTTLEFISH_TARGET=aosp_cf_arm64_only_phone-userdebug \
+APKW_CUTTLEFISH_BUILD_ID=12345678 \
 ./scripts/dev/run-all.sh
 ```
 The GTK UI also exposes branch/target/build id fields plus a "Resolve Build ID" button so you can
@@ -405,6 +405,6 @@ Notes:
 - Install Cuttlefish uses public artifacts from `ci.android.com`.
 - On smaller hosts, TargetService now auto-applies conservative launch limits and display sizing
   (for 4-core / ~8GB hosts: `--cpus=2 --memory_mb=3072 --x_res=720 --y_res=1280 --dpi=280`)
-  unless you already set those args in `AADK_CUTTLEFISH_START_ARGS`.
+  unless you already set those args in `APKW_CUTTLEFISH_START_ARGS`.
 - TargetService also patches empty `usr/share/webrtc/assets/custom.css` files in local Cuttlefish
   installs to avoid intermittent Web UI stylesheet dropouts on refresh.

@@ -57,7 +57,7 @@ fun SampleConsole() {
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text("Sample Console", fontSize = 30.sp, fontWeight = FontWeight.Bold)
-            Text("AADK distribution kit", fontSize = 14.sp, color = Accent)
+            Text("APKW distribution kit", fontSize = 14.sp, color = Accent)
         }
         Column(
             verticalArrangement = Arrangement.spacedBy(10.dp)

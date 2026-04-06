@@ -2,19 +2,19 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/release/aadk-env.sh
-source "${SCRIPT_DIR}/../release/aadk-env.sh"
+# shellcheck source=scripts/release/apkw-env.sh
+source "${SCRIPT_DIR}/../release/apkw-env.sh"
 
-export AADK_JOB_ADDR="${AADK_JOB_ADDR:-127.0.0.1:50051}"
-export AADK_TOOLCHAIN_ADDR="${AADK_TOOLCHAIN_ADDR:-127.0.0.1:50052}"
-export AADK_PROJECT_ADDR="${AADK_PROJECT_ADDR:-127.0.0.1:50053}"
-export AADK_BUILD_ADDR="${AADK_BUILD_ADDR:-127.0.0.1:50054}"
-export AADK_TARGETS_ADDR="${AADK_TARGETS_ADDR:-127.0.0.1:50055}"
-export AADK_OBSERVE_ADDR="${AADK_OBSERVE_ADDR:-127.0.0.1:50056}"
-export AADK_WORKFLOW_ADDR="${AADK_WORKFLOW_ADDR:-127.0.0.1:50057}"
+export APKW_JOB_ADDR="${APKW_JOB_ADDR:-127.0.0.1:50051}"
+export APKW_TOOLCHAIN_ADDR="${APKW_TOOLCHAIN_ADDR:-127.0.0.1:50052}"
+export APKW_PROJECT_ADDR="${APKW_PROJECT_ADDR:-127.0.0.1:50053}"
+export APKW_BUILD_ADDR="${APKW_BUILD_ADDR:-127.0.0.1:50054}"
+export APKW_TARGETS_ADDR="${APKW_TARGETS_ADDR:-127.0.0.1:50055}"
+export APKW_OBSERVE_ADDR="${APKW_OBSERVE_ADDR:-127.0.0.1:50056}"
+export APKW_WORKFLOW_ADDR="${APKW_WORKFLOW_ADDR:-127.0.0.1:50057}"
 
-aadk_prepare_launch_env
-aadk_print_launch_env_summary
+apkw_prepare_launch_env
+apkw_print_launch_env_summary
 
 pids=()
 
@@ -27,32 +27,32 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "Starting aadk-core (JobService) on $AADK_JOB_ADDR"
-cargo run -p aadk-core --quiet &
+echo "Starting apkw-core (JobService) on $APKW_JOB_ADDR"
+cargo run -p apkw-core --quiet &
 pids+=($!)
 
-echo "Starting aadk-toolchain on $AADK_TOOLCHAIN_ADDR"
-cargo run -p aadk-toolchain --quiet &
+echo "Starting apkw-toolchain on $APKW_TOOLCHAIN_ADDR"
+cargo run -p apkw-toolchain --quiet &
 pids+=($!)
 
-echo "Starting aadk-project on $AADK_PROJECT_ADDR"
-cargo run -p aadk-project --quiet &
+echo "Starting apkw-project on $APKW_PROJECT_ADDR"
+cargo run -p apkw-project --quiet &
 pids+=($!)
 
-echo "Starting aadk-build on $AADK_BUILD_ADDR"
-cargo run -p aadk-build --quiet &
+echo "Starting apkw-build on $APKW_BUILD_ADDR"
+cargo run -p apkw-build --quiet &
 pids+=($!)
 
-echo "Starting aadk-targets on $AADK_TARGETS_ADDR"
-cargo run -p aadk-targets --quiet &
+echo "Starting apkw-targets on $APKW_TARGETS_ADDR"
+cargo run -p apkw-targets --quiet &
 pids+=($!)
 
-echo "Starting aadk-observe on $AADK_OBSERVE_ADDR"
-cargo run -p aadk-observe --quiet &
+echo "Starting apkw-observe on $APKW_OBSERVE_ADDR"
+cargo run -p apkw-observe --quiet &
 pids+=($!)
 
-echo "Starting aadk-workflow on $AADK_WORKFLOW_ADDR"
-cargo run -p aadk-workflow --quiet &
+echo "Starting apkw-workflow on $APKW_WORKFLOW_ADDR"
+cargo run -p apkw-workflow --quiet &
 pids+=($!)
 
 echo

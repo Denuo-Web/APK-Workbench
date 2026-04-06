@@ -1,0 +1,24 @@
+.TH APKW-CLI 1 "April 2026" "APKW" "User Commands"
+.SH NAME
+apkw-cli \- command line client for APK Workbench services
+.SH SYNOPSIS
+.B apkw-cli
+\fICOMMAND\fR
+[\fIARGS\fR...]
+.SH DESCRIPTION
+.B apkw-cli
+provides command line access to the APK Workbench job, workflow, project, toolchain,
+target, observe, and build services.
+.PP
+Run
+.B apkw-cli --help
+or
+.B apkw-cli \fICOMMAND\fR --help
+to inspect the available subcommands and arguments.
+.SH FILES
+.TP
+.I ~/.local/share/apkw/state/cli-config.json
+Persisted CLI configuration.
+.SH SEE ALSO
+.BR apkw (1),
+.BR apkw-ui (1)

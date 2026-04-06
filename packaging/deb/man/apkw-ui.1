@@ -1,0 +1,24 @@
+.TH APKW-UI 1 "April 2026" "APKW" "User Commands"
+.SH NAME
+apkw-ui \- GTK4 client for APK Workbench
+.SH SYNOPSIS
+.B apkw-ui
+.SH DESCRIPTION
+.B apkw-ui
+opens the graphical APK Workbench client for project, toolchain, target, workflow, and
+evidence management.
+.PP
+The UI expects the APK Workbench gRPC services to be available on the configured local
+addresses. The packaged
+.BR apkw (1)
+launcher starts those services automatically before opening the UI.
+.SH FILES
+.TP
+.I ~/.local/share/apkw/state/ui-config.json
+Persisted UI configuration.
+.TP
+.I ~/.local/share/apkw/state/ui-state.json
+Persisted UI state.
+.SH SEE ALSO
+.BR apkw (1),
+.BR apkw-cli (1)

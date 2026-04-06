@@ -5,26 +5,31 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/release/common.sh
 source "${SCRIPT_DIR}/common.sh"
 
-cd "${AADK_RELEASE_ROOT}"
+cd "${APKW_RELEASE_ROOT}"
 
-VERSION="${VERSION:-$(aadk_workspace_version)}"
-OUT="dist/aadk-${VERSION}-linux-aarch64"
-ARCHIVE="dist/aadk-${VERSION}-linux-aarch64.tar.gz"
+VERSION="${VERSION:-$(apkw_workspace_version)}"
+OUT="dist/apkw-${VERSION}-linux-aarch64"
+ARCHIVE="dist/apkw-${VERSION}-linux-aarch64.tar.gz"
 CHECKSUM="${ARCHIVE}.sha256"
+ARCHIVE_NAME="$(basename "${ARCHIVE}")"
+CHECKSUM_NAME="$(basename "${CHECKSUM}")"
 
-aadk_release_require_linux_arm64
+apkw_release_require_linux_arm64
 mkdir -p dist
 
-aadk_release_build_workspace
-aadk_release_print_binaries
+apkw_release_build_workspace
+apkw_release_print_binaries
 
 rm -rf "${OUT}"
-aadk_release_install_binaries "${OUT}"
-aadk_release_install_launcher "${OUT}" "aadk-start.sh"
-aadk_release_install_docs "${OUT}"
+apkw_release_install_binaries "${OUT}"
+apkw_release_install_launcher "${OUT}" "apkw-start.sh"
+apkw_release_install_docs "${OUT}"
 rm -f "${ARCHIVE}" "${CHECKSUM}"
-tar -C dist -czf "${ARCHIVE}" "aadk-${VERSION}-linux-aarch64"
-sha256sum "${ARCHIVE}" > "${CHECKSUM}"
+tar -C dist -czf "${ARCHIVE}" "apkw-${VERSION}-linux-aarch64"
+(
+  cd dist
+  sha256sum "${ARCHIVE_NAME}" > "${CHECKSUM_NAME}"
+)
 
 echo "Built ${ARCHIVE}"
 echo "Built ${CHECKSUM}"

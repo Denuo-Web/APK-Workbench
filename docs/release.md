@@ -1,20 +1,20 @@
 # Release builds (Linux aarch64)
 
-AADK services and the GTK UI are only supported on Linux aarch64. Debian 13 is
+APK Workbench services and the GTK UI are only supported on Linux aarch64. Debian 13 is
 the primary validated distro for full-stack smoke tests and the optional `.deb`
 package flow.
 
 Use GitHub Releases as the canonical binary distribution channel:
-- Primary artifact: `aadk-${VERSION}-linux-aarch64.tar.gz`
-- Required companion checksum: `aadk-${VERSION}-linux-aarch64.tar.gz.sha256`
-- Optional extra artifact: `aadk_${VERSION}_arm64.deb`
+- Primary artifact: `apkw-${VERSION}-linux-aarch64.tar.gz`
+- Required companion checksum: `apkw-${VERSION}-linux-aarch64.tar.gz.sha256`
+- Optional extra artifact: `apkw_${VERSION}_arm64.deb`
 
 ## Build all binaries
 ```bash
 cargo build --release --workspace --locked
 ```
 
-For `aadk-ui`, the host also needs the GTK4 and WebKitGTK development packages
+For `apkw-ui`, the host also needs the GTK4 and WebKitGTK development packages
 available to `pkg-config`; on Debian 13 that means `libgtk-4-dev` and
 `libwebkitgtk-6.0-dev`.
 
@@ -33,17 +33,17 @@ Override the version:
 VERSION=0.1.0 scripts/release/build.sh
 ```
 
-Use `AADK_ALLOW_UNSUPPORTED_RELEASE_HOST=1` only for explicit experimental
+Use `APKW_ALLOW_UNSUPPORTED_RELEASE_HOST=1` only for explicit experimental
 packaging on unsupported hosts.
 
 From the extracted folder, run:
 ```bash
-./aadk-start.sh
+./apkw-start.sh
 ```
 
 Upload these files to a GitHub Release:
-- `dist/aadk-${VERSION}-linux-aarch64.tar.gz`
-- `dist/aadk-${VERSION}-linux-aarch64.tar.gz.sha256`
+- `dist/apkw-${VERSION}-linux-aarch64.tar.gz`
+- `dist/apkw-${VERSION}-linux-aarch64.tar.gz.sha256`
 
 ## Scripted release build
 The shared binary list lives in `scripts/release/common.sh`, so the tarball and
@@ -62,7 +62,7 @@ control metadata, and derives Java runtime recommendations from the shared
 launcher environment policy. It validates `PKGNAME` before packaging, strips
 packaged binaries during staging, and checks that the Debian architecture
 matches `ARCH` (default `arm64`) unless
-`AADK_ALLOW_UNSUPPORTED_RELEASE_HOST=1`.
+`APKW_ALLOW_UNSUPPORTED_RELEASE_HOST=1`.
 
 ```bash
 scripts/release/build-deb.sh
@@ -75,12 +75,12 @@ VERSION=0.1.0 scripts/release/build-deb.sh
 
 Override the package name:
 ```bash
-PKGNAME=aadk-nightly scripts/release/build-deb.sh
+PKGNAME=apkw-nightly scripts/release/build-deb.sh
 ```
 
 Default artifacts:
-- `dist/aadk_${VERSION}_arm64.deb`
-- `dist/aadk_${VERSION}_arm64.deb.sha256`
+- `dist/apkw_${VERSION}_arm64.deb`
+- `dist/apkw_${VERSION}_arm64.deb.sha256`
 
 When `PKGNAME` is overridden, the `.deb` filename and the package name used for
 install/remove commands change to match it.
@@ -90,22 +90,22 @@ Debian-specific downloads.
 
 Install:
 ```bash
-sudo apt install ./dist/aadk_${VERSION}_arm64.deb
+sudo apt install ./dist/apkw_${VERSION}_arm64.deb
 ```
 
 The Debian package pulls the GTK4 and WebKitGTK runtime libraries needed for
 the embedded Cuttlefish pane automatically.
 
 Menu entry:
-- Appears under `Development` as `AADK`.
-- Runs `aadk` (services + GTK UI). Logs go to `~/.local/share/aadk/logs`.
+- Appears under `Development` as `APK Workbench`.
+- Runs `apkw` (services + GTK UI). Logs go to `~/.local/share/apkw/logs`.
 
 Installed layout:
-- Versionless package payload lives under `/usr/lib/aadk`.
-- `/usr/bin/aadk`, `/usr/bin/aadk-ui`, and `/usr/bin/aadk-cli` are symlinked entry points.
-- Minimal manpages are installed for `aadk(1)`, `aadk-ui(1)`, and `aadk-cli(1)`.
+- Versionless package payload lives under `/usr/lib/apkw`.
+- `/usr/bin/apkw`, `/usr/bin/apkw-ui`, and `/usr/bin/apkw-cli` are symlinked entry points.
+- Minimal manpages are installed for `apkw(1)`, `apkw-ui(1)`, and `apkw-cli(1)`.
 
 Uninstall:
 ```bash
-sudo apt remove aadk
+sudo apt remove apkw
 ```

@@ -1,7 +1,7 @@
-# AADK Full - Agent Overview
+# APK Workbench - Agent Overview
 
 ## Purpose
-This repository is a GUI-first, multi-service gRPC platform for an Android DevKit style workflow.
+This repository is a GUI-first, multi-service gRPC platform for Android development workflows.
 It is intentionally minimal but complete enough to extend. The GTK4 UI and CLI are thin clients;
 the service crates contain the real workflows. The project is designed around a JobService that
 streams events to clients while long-running jobs execute in other services.
@@ -11,18 +11,18 @@ streams events to clients while long-running jobs execute in other services.
 - Debian 13 on Linux ARM64 is the primary validated distro for full-stack support, release smoke
   tests, and default Cuttlefish host-tool automation.
 - Non-Debian Linux ARM64 hosts are experimental for the full stack and generally require explicit
-  overrides such as AADK_CUTTLEFISH_INSTALL_CMD.
+  overrides such as APKW_CUTTLEFISH_INSTALL_CMD.
 - x86_64 is intentionally out of scope because Android Studio already covers it.
 - Toolchain catalog includes Linux ARM64 SDK/NDK artifacts plus Windows ARM64 NDK artifacts (r29/r28c/r27d);
   no darwin SDK/NDK artifacts are published in the custom catalogs.
-- Cuttlefish install uses AADK_CUTTLEFISH_INSTALL_CMD when set; Debian-like hosts fall back to the
+- Cuttlefish install uses APKW_CUTTLEFISH_INSTALL_CMD when set; Debian-like hosts fall back to the
   android-cuttlefish apt repo install command.
 - GitHub Releases is the canonical binary distribution channel (`linux-aarch64.tar.gz` plus checksums);
   the Debian `.deb` is an additional convenience artifact, and GitHub Packages is not used for native binaries.
 - Release packaging scripts default `VERSION` from workspace metadata, share a single binary list via
-  `scripts/release/common.sh`, share Java runtime policy via `scripts/release/aadk-env.sh`, and enforce Linux ARM64 host checks unless
-  `AADK_ALLOW_UNSUPPORTED_RELEASE_HOST=1` is set for explicit experimental packaging.
-- Debian packages install the launcher and binaries under `/usr/lib/aadk`, expose `/usr/bin/{aadk,aadk-ui,aadk-cli}` symlinks,
+  `scripts/release/common.sh`, share Java runtime policy via `scripts/release/apkw-env.sh`, and enforce Linux ARM64 host checks unless
+  `APKW_ALLOW_UNSUPPORTED_RELEASE_HOST=1` is set for explicit experimental packaging.
+- Debian packages install the launcher and binaries under `/usr/lib/apkw`, expose `/usr/bin/{apkw,apkw-ui,apkw-cli}` symlinks,
   ship minimal manpages for those commands, depend on `libgtk-4-1` plus `libwebkitgtk-6.0-4` for the embedded Cuttlefish pane,
   validate `PKGNAME` before packaging, and strip staged binaries during packaging.
 
@@ -32,41 +32,41 @@ files, commits, or pushes, update the relevant AGENTS.md entries and adjust TODO
 completed items or move them into the implementation notes.
 
 ## Repository map
-- crates/aadk-core: JobService (event streaming and job registry)
-- crates/aadk-workflow: WorkflowService (multi-step pipeline orchestration)
-- crates/aadk-toolchain: ToolchainService (SDK/NDK provider, install, verify)
-- crates/aadk-project: ProjectService (templates, create/open, recent list)
-- crates/aadk-build: BuildService (Gradle builds and artifact listing)
-- crates/aadk-targets: TargetService (ADB + Cuttlefish target management)
-- crates/aadk-observe: ObserveService (run history and bundle export)
-- crates/aadk-ui: GTK4 GUI client
-- crates/aadk-cli: CLI sanity tool
-- crates/aadk-util: Shared helpers (paths, time, service bootstrap, job history)
-- crates/aadk-telemetry: Opt-in telemetry spooler (usage events + crash reports)
-- crates/aadk-proto: Rust gRPC codegen for proto/aadk/v1
-- proto/aadk/v1/*.proto: gRPC contracts
+- crates/apkw-core: JobService (event streaming and job registry)
+- crates/apkw-workflow: WorkflowService (multi-step pipeline orchestration)
+- crates/apkw-toolchain: ToolchainService (SDK/NDK provider, install, verify)
+- crates/apkw-project: ProjectService (templates, create/open, recent list)
+- crates/apkw-build: BuildService (Gradle builds and artifact listing)
+- crates/apkw-targets: TargetService (ADB + Cuttlefish target management)
+- crates/apkw-observe: ObserveService (run history and bundle export)
+- crates/apkw-ui: GTK4 GUI client
+- crates/apkw-cli: CLI sanity tool
+- crates/apkw-util: Shared helpers (paths, time, service bootstrap, job history)
+- crates/apkw-telemetry: Opt-in telemetry spooler (usage events + crash reports)
+- crates/apkw-proto: Rust gRPC codegen for proto/apkw/v1
+- proto/apkw/v1/*.proto: gRPC contracts
 - CHANGELOG.md: release notes and post-tag history used for version increment prep
-- scripts/dev/run-all.sh: local dev runner for all services (uses the shared launcher env helper to auto-export ANDROID_SDK_ROOT/ANDROID_HOME and AADK_ADB_PATH when an SDK is detected)
+- scripts/dev/run-all.sh: local dev runner for all services (uses the shared launcher env helper to auto-export ANDROID_SDK_ROOT/ANDROID_HOME and APKW_ADB_PATH when an SDK is detected)
 - scripts/release/common.sh: shared release metadata/helpers (workspace version, supported-host guards, binary list)
-- scripts/release/aadk-env.sh: shared Android/Java environment detection for the dev runner and installed launcher
+- scripts/release/apkw-env.sh: shared Android/Java environment detection for the dev runner and installed launcher
 - scripts/release/build.sh: release build + GitHub Releases tarball packaging helper
 - scripts/release/build-deb.sh: Debian (.deb) convenience package builder (templates package metadata/docs and installs the launcher helper)
-- scripts/release/aadk-start.sh: installed launcher (services + UI, logs to ~/.local/share/aadk/logs)
+- scripts/release/apkw-start.sh: installed launcher (services + UI, logs to ~/.local/share/apkw/logs)
 - packaging/deb/*: Debian packaging metadata (control, desktop entry, postinst/postrm, manpages)
-- assets/aadk.svg: GTK app icon used by the Debian package
+- assets/apkw.svg: GTK app icon used by the Debian package
 - docs/release.md: release build steps
-- SampleConsole: Minimal Compose sample app (Sample Console) bundled with AADK
+- SampleConsole: Minimal Compose sample app (Sample Console) bundled with APKW
 - CS492_Assignment1_RosenauJ/CS492A1RosenauJ: Course assignment sample app
 
 ## Runtime topology
 Default addresses (override with env vars):
-- Job/Core:     127.0.0.1:50051 (AADK_JOB_ADDR)
-- Toolchain:    127.0.0.1:50052 (AADK_TOOLCHAIN_ADDR)
-- Project:      127.0.0.1:50053 (AADK_PROJECT_ADDR)
-- Build:        127.0.0.1:50054 (AADK_BUILD_ADDR)
-- Targets:      127.0.0.1:50055 (AADK_TARGETS_ADDR)
-- Observe:      127.0.0.1:50056 (AADK_OBSERVE_ADDR)
-- Workflow:     127.0.0.1:50057 (AADK_WORKFLOW_ADDR)
+- Job/Core:     127.0.0.1:50051 (APKW_JOB_ADDR)
+- Toolchain:    127.0.0.1:50052 (APKW_TOOLCHAIN_ADDR)
+- Project:      127.0.0.1:50053 (APKW_PROJECT_ADDR)
+- Build:        127.0.0.1:50054 (APKW_BUILD_ADDR)
+- Targets:      127.0.0.1:50055 (APKW_TARGETS_ADDR)
+- Observe:      127.0.0.1:50056 (APKW_OBSERVE_ADDR)
+- Workflow:     127.0.0.1:50057 (APKW_WORKFLOW_ADDR)
 
 ## Cross-service flows
 - UI/CLI call gRPC services; they do not implement business logic.
@@ -90,12 +90,12 @@ Default addresses (override with env vars):
 - TargetService Cuttlefish start patches empty WebRTC `custom.css` assets in local Cuttlefish
   image dirs to avoid intermittent browser stylesheet dropouts.
 - TargetService now treats the Cuttlefish Debian host packages as part of host-tool readiness:
-  unless `AADK_CUTTLEFISH_START_CMD` overrides startup, `/usr/lib/cuttlefish-common/bin/capability_query.py`
-  (or `AADK_CUTTLEFISH_CAPABILITY_QUERY`) must exist or install/start/status surfaces a host-tools-incomplete error.
+  unless `APKW_CUTTLEFISH_START_CMD` overrides startup, `/usr/lib/cuttlefish-common/bin/capability_query.py`
+  (or `APKW_CUTTLEFISH_CAPABILITY_QUERY`) must exist or install/start/status surfaces a host-tools-incomplete error.
 - TargetService default Debian host installs prefer passwordless `sudo -n`, but can fall back to
   `pkexec` in graphical sessions so package reinstalls still work when the local host bundle exists
   but the system Cuttlefish helpers were removed.
-- ToolchainService downloads SDK/NDK archives, verifies sha256, persists state under ~/.local/share/aadk.
+- ToolchainService downloads SDK/NDK archives, verifies sha256, persists state under ~/.local/share/apkw.
 - ToolchainService normalizes SDK cmdline-tools layout by creating cmdline-tools/latest links when
   archives ship a flat cmdline-tools/bin + lib layout.
 - ToolchainService catalog pins SDK 36.0.0/35.0.2 and NDK r29/r28c/r27d/r26d; Linux ARM64 artifacts use
@@ -115,56 +115,56 @@ Default addresses (override with env vars):
 - UI header New project runs reset-all-state then opens the project folder picker; Open project uses the picker and auto-opens existing projects.
 
 ## Shared data and locations
-- Job state: ~/.local/share/aadk/state/jobs.json
-- UI config: ~/.local/share/aadk/state/ui-config.json
-- UI state: ~/.local/share/aadk/state/ui-state.json
-- CLI config: ~/.local/share/aadk/state/cli-config.json
-- Project state: ~/.local/share/aadk/state/projects.json
-- Build state: ~/.local/share/aadk/state/builds.json
-- Toolchain state: ~/.local/share/aadk/state/toolchains.json
-- Toolchain downloads: ~/.local/share/aadk/downloads
-- Toolchain installs: ~/.local/share/aadk/toolchains
-- Target state: ~/.local/share/aadk/state/targets.json
-- Observe state: ~/.local/share/aadk/state/observe.json
-- Observe bundle outputs: ~/.local/share/aadk/bundles
-- UI/CLI log exports: ~/.local/share/aadk/state/*-job-export-*.json
-- State export archives: ~/.local/share/aadk/state-exports/*.zip
-- State operation queue/locks: ~/.local/share/aadk/state-ops
-- Telemetry events/crashes: ~/.local/share/aadk/telemetry/<app>/*
+- Job state: ~/.local/share/apkw/state/jobs.json
+- UI config: ~/.local/share/apkw/state/ui-config.json
+- UI state: ~/.local/share/apkw/state/ui-state.json
+- CLI config: ~/.local/share/apkw/state/cli-config.json
+- Project state: ~/.local/share/apkw/state/projects.json
+- Build state: ~/.local/share/apkw/state/builds.json
+- Toolchain state: ~/.local/share/apkw/state/toolchains.json
+- Toolchain downloads: ~/.local/share/apkw/downloads
+- Toolchain installs: ~/.local/share/apkw/toolchains
+- Target state: ~/.local/share/apkw/state/targets.json
+- Observe state: ~/.local/share/apkw/state/observe.json
+- Observe bundle outputs: ~/.local/share/apkw/bundles
+- UI/CLI log exports: ~/.local/share/apkw/state/*-job-export-*.json
+- State export archives: ~/.local/share/apkw/state-exports/*.zip
+- State operation queue/locks: ~/.local/share/apkw/state-ops
+- Telemetry events/crashes: ~/.local/share/apkw/telemetry/<app>/*
 
 ## Per-service AGENT files
-- crates/aadk-project/AGENTS.md
-- crates/aadk-core/AGENTS.md
-- crates/aadk-workflow/AGENTS.md
-- crates/aadk-observe/AGENTS.md
-- crates/aadk-build/AGENTS.md
-- crates/aadk-toolchain/AGENTS.md
-- crates/aadk-targets/AGENTS.md
-- crates/aadk-ui/AGENTS.md
-- crates/aadk-cli/AGENTS.md
-- crates/aadk-telemetry/AGENTS.md
-- proto/aadk/v1/AGENTS.md
+- crates/apkw-project/AGENTS.md
+- crates/apkw-core/AGENTS.md
+- crates/apkw-workflow/AGENTS.md
+- crates/apkw-observe/AGENTS.md
+- crates/apkw-build/AGENTS.md
+- crates/apkw-toolchain/AGENTS.md
+- crates/apkw-targets/AGENTS.md
+- crates/apkw-ui/AGENTS.md
+- crates/apkw-cli/AGENTS.md
+- crates/apkw-telemetry/AGENTS.md
+- proto/apkw/v1/AGENTS.md
 
 ## Prioritized TODO checklist by service
 
-### ProjectService (aadk-project)
+### ProjectService (apkw-project)
 - None (workflow UI relies on existing create/open APIs).
 
-### JobService (aadk-core)
+### JobService (apkw-core)
 - None (StreamRunEvents already supports workflow/run dashboards).
 
-### ObserveService (aadk-observe)
+### ObserveService (apkw-observe)
 - None (run output inventory is stored and exposed via ListRunOutputs with summary pointers).
 
-### BuildService (aadk-build)
+### BuildService (apkw-build)
 - None.
 
-### ToolchainService (aadk-toolchain)
+### ToolchainService (apkw-toolchain)
 - None.
 
-### TargetService (aadk-targets)
+### TargetService (apkw-targets)
 - None.
 
-### Clients (aadk-ui, aadk-cli)
+### Clients (apkw-ui, apkw-cli)
 - Add picker integrations for workflow inputs (templates, toolchain sets, targets) to reduce manual ids.
 - Add run filters (project/target/toolchain/result) and output shortcuts (open/export) to Evidence dashboards.

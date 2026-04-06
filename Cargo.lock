@@ -3,203 +3,6 @@
 version = 4
 
 [[package]]
-name = "aadk-build"
-version = "0.1.0"
-dependencies = [
- "aadk-proto",
- "aadk-telemetry",
- "aadk-util",
- "prost",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "tonic",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "aadk-cli"
-version = "0.1.0"
-dependencies = [
- "aadk-proto",
- "aadk-telemetry",
- "aadk-util",
- "clap",
- "futures-util",
- "serde",
- "serde_json",
- "tokio",
- "tonic",
-]
-
-[[package]]
-name = "aadk-core"
-version = "0.1.0"
-dependencies = [
- "aadk-proto",
- "aadk-telemetry",
- "aadk-util",
- "futures-util",
- "prost",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "tonic",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "aadk-observe"
-version = "0.1.0"
-dependencies = [
- "aadk-proto",
- "aadk-telemetry",
- "aadk-util",
- "prost",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "tonic",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "zip",
-]
-
-[[package]]
-name = "aadk-project"
-version = "0.1.0"
-dependencies = [
- "aadk-proto",
- "aadk-telemetry",
- "aadk-util",
- "prost",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "tonic",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "aadk-proto"
-version = "0.1.0"
-dependencies = [
- "prost",
- "prost-types",
- "tonic",
- "tonic-build",
-]
-
-[[package]]
-name = "aadk-targets"
-version = "0.1.0"
-dependencies = [
- "aadk-proto",
- "aadk-telemetry",
- "aadk-util",
- "libc",
- "prost",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "tonic",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "aadk-telemetry"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "aadk-toolchain"
-version = "0.1.0"
-dependencies = [
- "aadk-proto",
- "aadk-telemetry",
- "aadk-util",
- "base64",
- "ed25519-dalek",
- "futures-util",
- "prost",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "tokio-stream",
- "tonic",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "aadk-ui"
-version = "0.1.0"
-dependencies = [
- "aadk-proto",
- "aadk-telemetry",
- "aadk-util",
- "futures-util",
- "glib",
- "gtk4",
- "serde",
- "serde_json",
- "tokio",
- "tonic",
- "webkit6",
-]
-
-[[package]]
-name = "aadk-util"
-version = "0.1.0"
-dependencies = [
- "aadk-proto",
- "aadk-telemetry",
- "fs2",
- "libc",
- "serde",
- "serde_json",
- "tonic",
- "tracing",
- "tracing-subscriber",
- "walkdir",
- "zip",
-]
-
-[[package]]
-name = "aadk-workflow"
-version = "0.1.0"
-dependencies = [
- "aadk-proto",
- "aadk-telemetry",
- "aadk-util",
- "futures-util",
- "prost",
- "tokio",
- "tonic",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -269,6 +72,203 @@ name = "anyhow"
 version = "1.0.100"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
+
+[[package]]
+name = "apkw-build"
+version = "0.1.0"
+dependencies = [
+ "apkw-proto",
+ "apkw-telemetry",
+ "apkw-util",
+ "prost",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "apkw-cli"
+version = "0.1.0"
+dependencies = [
+ "apkw-proto",
+ "apkw-telemetry",
+ "apkw-util",
+ "clap",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tonic",
+]
+
+[[package]]
+name = "apkw-core"
+version = "0.1.0"
+dependencies = [
+ "apkw-proto",
+ "apkw-telemetry",
+ "apkw-util",
+ "futures-util",
+ "prost",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "apkw-observe"
+version = "0.1.0"
+dependencies = [
+ "apkw-proto",
+ "apkw-telemetry",
+ "apkw-util",
+ "prost",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "zip",
+]
+
+[[package]]
+name = "apkw-project"
+version = "0.1.0"
+dependencies = [
+ "apkw-proto",
+ "apkw-telemetry",
+ "apkw-util",
+ "prost",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "apkw-proto"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+ "tonic",
+ "tonic-build",
+]
+
+[[package]]
+name = "apkw-targets"
+version = "0.1.0"
+dependencies = [
+ "apkw-proto",
+ "apkw-telemetry",
+ "apkw-util",
+ "libc",
+ "prost",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "apkw-telemetry"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "apkw-toolchain"
+version = "0.1.0"
+dependencies = [
+ "apkw-proto",
+ "apkw-telemetry",
+ "apkw-util",
+ "base64",
+ "ed25519-dalek",
+ "futures-util",
+ "prost",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "apkw-ui"
+version = "0.1.0"
+dependencies = [
+ "apkw-proto",
+ "apkw-telemetry",
+ "apkw-util",
+ "futures-util",
+ "glib",
+ "gtk4",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tonic",
+ "webkit6",
+]
+
+[[package]]
+name = "apkw-util"
+version = "0.1.0"
+dependencies = [
+ "apkw-proto",
+ "apkw-telemetry",
+ "fs2",
+ "libc",
+ "serde",
+ "serde_json",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+ "walkdir",
+ "zip",
+]
+
+[[package]]
+name = "apkw-workflow"
+version = "0.1.0"
+dependencies = [
+ "apkw-proto",
+ "apkw-telemetry",
+ "apkw-util",
+ "futures-util",
+ "prost",
+ "tokio",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
 
 [[package]]
 name = "async-stream"
