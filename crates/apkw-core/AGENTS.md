@@ -24,6 +24,8 @@ Update this file whenever JobService behavior changes or when commits touching t
 - StreamJobEvents replays history (optional) and then forwards live events.
 - StreamRunEvents aggregates jobs by run_id (or correlation_id), with bounded buffering for best-effort
   timestamp ordering and periodic discovery for late-arriving jobs.
+- JobStore maintains run-id and correlation-id indexes so StreamRunEvents discovery can subscribe only
+  candidate jobs instead of rescanning the entire job registry each poll interval.
 - ListJobs supports pagination with filters by job_type, state, run_id, and created/finished timestamps.
 - ListJobHistory returns paginated job events with optional kind/time filters.
 - publish_job_event updates job state on StateChanged/Completed/Failed payloads before broadcasting.

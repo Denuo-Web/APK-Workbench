@@ -806,27 +806,104 @@ async fn spawn_job_stream(
     });
 }
 
+#[derive(Clone, Debug, Default)]
+struct JobIndexKey {
+    run_id: String,
+    correlation_id: String,
+}
+
+#[derive(Default)]
+struct JobStoreInner {
+    records: HashMap<String, Arc<Mutex<JobRecordInner>>>,
+    index_keys: HashMap<String, JobIndexKey>,
+    run_index: HashMap<String, HashSet<String>>,
+    correlation_index: HashMap<String, HashSet<String>>,
+}
+
 #[derive(Clone, Default)]
 struct JobStore {
-    inner: Arc<Mutex<HashMap<String, Arc<Mutex<JobRecordInner>>>>>,
+    inner: Arc<Mutex<JobStoreInner>>,
+}
+
+impl JobIndexKey {
+    fn from_job(job: &Job) -> Self {
+        Self {
+            run_id: job
+                .run_id
+                .as_ref()
+                .map(|id| id.value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .unwrap_or_default(),
+            correlation_id: job.correlation_id.trim().to_string(),
+        }
+    }
+}
+
+fn insert_job_indexes(inner: &mut JobStoreInner, job_id: &str, key: &JobIndexKey) {
+    if !key.run_id.is_empty() {
+        inner
+            .run_index
+            .entry(key.run_id.clone())
+            .or_default()
+            .insert(job_id.to_string());
+    }
+    if !key.correlation_id.is_empty() {
+        inner
+            .correlation_index
+            .entry(key.correlation_id.clone())
+            .or_default()
+            .insert(job_id.to_string());
+    }
+    inner.index_keys.insert(job_id.to_string(), key.clone());
+}
+
+fn remove_job_indexes(inner: &mut JobStoreInner, job_id: &str) {
+    let Some(key) = inner.index_keys.remove(job_id) else {
+        return;
+    };
+    if !key.run_id.is_empty() {
+        let remove_key = if let Some(ids) = inner.run_index.get_mut(&key.run_id) {
+            ids.remove(job_id);
+            ids.is_empty()
+        } else {
+            false
+        };
+        if remove_key {
+            inner.run_index.remove(&key.run_id);
+        }
+    }
+    if !key.correlation_id.is_empty() {
+        let remove_key = if let Some(ids) = inner.correlation_index.get_mut(&key.correlation_id) {
+            ids.remove(job_id);
+            ids.is_empty()
+        } else {
+            false
+        };
+        if remove_key {
+            inner.correlation_index.remove(&key.correlation_id);
+        }
+    }
 }
 
 impl JobStore {
     async fn insert(&self, job_id: &str, rec: JobRecordInner) {
-        self.inner
-            .lock()
-            .await
+        let key = JobIndexKey::from_job(&rec.job);
+        let mut inner = self.inner.lock().await;
+        remove_job_indexes(&mut inner, job_id);
+        inner
+            .records
             .insert(job_id.to_string(), Arc::new(Mutex::new(rec)));
+        insert_job_indexes(&mut inner, job_id, &key);
     }
 
     async fn get(&self, job_id: &str) -> Option<Arc<Mutex<JobRecordInner>>> {
-        self.inner.lock().await.get(job_id).cloned()
+        self.inner.lock().await.records.get(job_id).cloned()
     }
 
     async fn list_jobs(&self) -> Vec<Job> {
         let entries = {
             let inner = self.inner.lock().await;
-            inner.values().cloned().collect::<Vec<_>>()
+            inner.records.values().cloned().collect::<Vec<_>>()
         };
         let mut jobs = Vec::with_capacity(entries.len());
         for rec in entries {
@@ -840,6 +917,7 @@ impl JobStore {
         let entries = {
             let inner = self.inner.lock().await;
             inner
+                .records
                 .iter()
                 .map(|(job_id, rec)| (job_id.clone(), rec.clone()))
                 .collect::<Vec<_>>()
@@ -855,13 +933,47 @@ impl JobStore {
 
     async fn prune_to(&self, keep_ids: &HashSet<String>) {
         let mut inner = self.inner.lock().await;
-        inner.retain(|job_id, _| keep_ids.contains(job_id));
+        let removed = inner
+            .records
+            .keys()
+            .filter(|job_id| !keep_ids.contains(*job_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        inner.records.retain(|job_id, _| keep_ids.contains(job_id));
+        for job_id in removed {
+            remove_job_indexes(&mut inner, &job_id);
+        }
     }
 
     async fn replace_with(&self, other: JobStore) {
         let mut inner = self.inner.lock().await;
         let mut other_inner = other.inner.lock().await;
         *inner = std::mem::take(&mut *other_inner);
+    }
+
+    async fn candidate_run_records(
+        &self,
+        run_id: &str,
+        correlation_id: &str,
+    ) -> Vec<(String, Arc<Mutex<JobRecordInner>>)> {
+        let run_id = run_id.trim();
+        let correlation_id = correlation_id.trim();
+        let inner = self.inner.lock().await;
+        let mut candidate_ids = HashSet::new();
+        if !run_id.is_empty() {
+            if let Some(ids) = inner.run_index.get(run_id) {
+                candidate_ids.extend(ids.iter().cloned());
+            }
+        }
+        if !correlation_id.is_empty() {
+            if let Some(ids) = inner.correlation_index.get(correlation_id) {
+                candidate_ids.extend(ids.iter().cloned());
+            }
+        }
+        candidate_ids
+            .into_iter()
+            .filter_map(|job_id| inner.records.get(&job_id).cloned().map(|rec| (job_id, rec)))
+            .collect()
     }
 }
 
@@ -873,23 +985,20 @@ async fn discover_run_jobs(
     known_jobs: &mut HashSet<String>,
     event_tx: &mpsc::Sender<JobEvent>,
 ) {
-    let jobs = store.list_jobs().await;
-    for job in jobs {
-        let job_id = job
-            .job_id
-            .as_ref()
-            .map(|id| id.value.clone())
-            .unwrap_or_default();
+    let candidates = store.candidate_run_records(run_id, correlation_id).await;
+    for (job_id, rec) in candidates {
         if job_id.is_empty() || known_jobs.contains(&job_id) {
             continue;
         }
-        if !job_matches_run(&job, run_id, correlation_id) {
+        let job_matches = {
+            let inner = rec.lock().await;
+            job_matches_run(&inner.job, run_id, correlation_id)
+        };
+        if !job_matches {
             continue;
         }
         known_jobs.insert(job_id.clone());
-        if let Some(rec) = store.get(&job_id).await {
-            spawn_job_stream(job_id, rec, include_history, event_tx.clone()).await;
-        }
+        spawn_job_stream(job_id, rec, include_history, event_tx.clone()).await;
     }
 }
 
