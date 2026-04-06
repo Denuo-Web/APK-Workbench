@@ -4,6 +4,8 @@ APK Workbench services and the GTK UI are only supported on Linux aarch64. Debia
 the primary validated distro for full-stack smoke tests and the optional `.deb`
 package flow.
 
+Canonical repository: `https://github.com/Denuo-Web/APK-Workshop`
+
 Use GitHub Releases as the canonical binary distribution channel:
 - Primary artifact: `apkw-${VERSION}-linux-aarch64.tar.gz`
 - Required companion checksum: `apkw-${VERSION}-linux-aarch64.tar.gz.sha256`
@@ -41,7 +43,7 @@ From the extracted folder, run:
 ./apkw-start.sh
 ```
 
-Upload these files to a GitHub Release:
+Upload these files to a GitHub Release in `Denuo-Web/APK-Workshop`:
 - `dist/apkw-${VERSION}-linux-aarch64.tar.gz`
 - `dist/apkw-${VERSION}-linux-aarch64.tar.gz.sha256`
 
@@ -85,7 +87,8 @@ Default artifacts:
 When `PKGNAME` is overridden, the `.deb` filename and the package name used for
 install/remove commands change to match it.
 
-If you build it, attach both files to the same GitHub Release as optional
+If you build it, attach both files to the same GitHub Release in
+`Denuo-Web/APK-Workshop` as optional
 Debian-specific downloads.
 
 Install:

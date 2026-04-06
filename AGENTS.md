@@ -5,6 +5,7 @@ This repository is a GUI-first, multi-service gRPC platform for Android developm
 It is intentionally minimal but complete enough to extend. The GTK4 UI and CLI are thin clients;
 the service crates contain the real workflows. The project is designed around a JobService that
 streams events to clients while long-running jobs execute in other services.
+- Canonical upstream repository: `https://github.com/Denuo-Web/APK-Workshop`
 
 ## Supported host
 - Linux ARM64 (aarch64) is the only supported host for running the full stack (services/UI/Cuttlefish).

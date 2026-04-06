@@ -6,6 +6,9 @@ GUI-first, multi-service gRPC platform for Android development workflows. The GT
 are thin clients; all real work lives in the service crates. JobService is the event bus that
 streams job state/progress/logs to clients.
 
+- Source repository: `https://github.com/Denuo-Web/APK-Workshop`
+- Releases: `https://github.com/Denuo-Web/APK-Workshop/releases`
+
 ## Supported host
 - Linux ARM64 (aarch64) is the only supported host for running the full stack (services/UI/Cuttlefish).
 - Debian 13 on Linux ARM64 is the primary validated distro for full-stack support, release smoke tests,
@@ -186,7 +189,8 @@ tar -C dist -czf "apkw-${VERSION}-linux-aarch64.tar.gz" "apkw-${VERSION}-linux-a
 sha256sum "apkw-${VERSION}-linux-aarch64.tar.gz" > "apkw-${VERSION}-linux-aarch64.tar.gz.sha256"
 ```
 
-Upload `apkw-${VERSION}-linux-aarch64.tar.gz` and its `.sha256` file to a GitHub Release.
+Upload `apkw-${VERSION}-linux-aarch64.tar.gz` and its `.sha256` file to a GitHub Release in
+`Denuo-Web/APK-Workshop`.
 GitHub Packages is not used for native APKW desktop binaries.
 
 Optional Debian convenience package:

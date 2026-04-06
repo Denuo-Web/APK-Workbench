@@ -3,6 +3,8 @@ name = "apkw-proto"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 prost = "0.13"

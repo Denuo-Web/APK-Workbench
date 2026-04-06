@@ -6,6 +6,9 @@ The format is based on Keep a Changelog and the project versioning follows Seman
 
 ## [Unreleased]
 
+### Changed
+- Repository metadata, release docs, and README links now point at `github.com/Denuo-Web/APK-Workshop` after the GitHub owner/repository move.
+
 ## [0.2.0] - 2026-04-06
 
 ### Added
