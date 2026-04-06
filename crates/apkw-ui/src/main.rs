@@ -657,6 +657,43 @@ fn capture_ui_state(
     state.settings.open_path = settings.open_entry.text().to_string();
 }
 
+#[allow(clippy::too_many_arguments)]
+fn persist_ui_state_snapshot(
+    ui_state: &Arc<std::sync::Mutex<UiState>>,
+    last_saved_ui_state: &Arc<std::sync::Mutex<Option<UiState>>>,
+    home: &HomePage,
+    workflow: &WorkflowPage,
+    toolchains: &ToolchainsPage,
+    projects: &ProjectsPage,
+    targets: &TargetsPage,
+    build: &BuildPage,
+    jobs: &JobsHistoryPage,
+    evidence: &EvidencePage,
+    settings: &SettingsPage,
+) -> std::io::Result<bool> {
+    let snapshot = {
+        let mut state = ui_state.lock().unwrap();
+        capture_ui_state(
+            &mut state, home, workflow, toolchains, projects, targets, build, jobs, evidence,
+            settings,
+        );
+        let last_saved = last_saved_ui_state.lock().unwrap();
+        let should_save = last_saved
+            .as_ref()
+            .map(|saved| saved != &*state)
+            .unwrap_or(true);
+        if !should_save {
+            return Ok(false);
+        }
+        state.clone()
+    };
+
+    snapshot.save()?;
+    let mut last_saved = last_saved_ui_state.lock().unwrap();
+    *last_saved = Some(snapshot);
+    Ok(true)
+}
+
 fn build_ui(app: &gtk::Application) {
     let (default_width, default_height) = default_window_size();
     let window = gtk::ApplicationWindow::builder()
@@ -670,6 +707,11 @@ fn build_ui(app: &gtk::Application) {
     let cfg = Arc::new(std::sync::Mutex::new(AppConfig::load()));
     let (initial_state, has_ui_state) = UiState::load_with_status();
     let ui_state = Arc::new(std::sync::Mutex::new(initial_state.clone()));
+    let last_saved_ui_state = Arc::new(std::sync::Mutex::new(if has_ui_state {
+        Some(initial_state.clone())
+    } else {
+        None
+    }));
     let (usage_enabled, crash_enabled, install_id) = {
         let mut cfg = cfg.lock().unwrap();
         let usage_enabled =
@@ -944,6 +986,17 @@ fn build_ui(app: &gtk::Application) {
     let exclude_telemetry_save = settings.exclude_telemetry.clone();
     let save_entry_state = settings.save_entry.clone();
     let window_state_save = window.clone();
+    let ui_state_state_save = ui_state.clone();
+    let last_saved_ui_state_state_save = last_saved_ui_state.clone();
+    let home_state_save = home.clone();
+    let workflow_state_save = workflow.clone();
+    let toolchains_state_save = toolchains.clone();
+    let projects_state_save = projects.clone();
+    let targets_state_save = targets.clone();
+    let console_state_save = console.clone();
+    let jobs_history_state_save = jobs_history.clone();
+    let evidence_state_save = evidence.clone();
+    let settings_state_save = settings.clone();
     save_state_btn.connect_clicked(move |_| {
         let cfg_state_save = cfg_state_save.clone();
         let cmd_tx_state_save = cmd_tx_state_save.clone();
@@ -952,6 +1005,17 @@ fn build_ui(app: &gtk::Application) {
         let exclude_bundles_save = exclude_bundles_save.clone();
         let exclude_telemetry_save = exclude_telemetry_save.clone();
         let save_entry_dialog = save_entry_state.clone();
+        let ui_state_state_save = ui_state_state_save.clone();
+        let last_saved_ui_state_state_save = last_saved_ui_state_state_save.clone();
+        let home_state_save = home_state_save.clone();
+        let workflow_state_save = workflow_state_save.clone();
+        let toolchains_state_save = toolchains_state_save.clone();
+        let projects_state_save = projects_state_save.clone();
+        let targets_state_save = targets_state_save.clone();
+        let console_state_save = console_state_save.clone();
+        let jobs_history_state_save = jobs_history_state_save.clone();
+        let evidence_state_save = evidence_state_save.clone();
+        let settings_state_save = settings_state_save.clone();
         let default_name = state_export_path()
             .file_name()
             .and_then(|name| name.to_str())
@@ -963,6 +1027,21 @@ fn build_ui(app: &gtk::Application) {
             "Save APKW State Archive",
             Some(default_name),
             Some(Box::new(move |path| {
+                if let Err(err) = persist_ui_state_snapshot(
+                    &ui_state_state_save,
+                    &last_saved_ui_state_state_save,
+                    &home_state_save,
+                    &workflow_state_save,
+                    &toolchains_state_save,
+                    &projects_state_save,
+                    &targets_state_save,
+                    &console_state_save,
+                    &jobs_history_state_save,
+                    &evidence_state_save,
+                    &settings_state_save,
+                ) {
+                    eprintln!("Failed to persist UI state before archive save: {err}");
+                }
                 let cfg = cfg_state_save.lock().unwrap().clone();
                 cmd_tx_state_save
                     .try_send(UiCommand::StateSave {
@@ -1042,6 +1121,38 @@ fn build_ui(app: &gtk::Application) {
         );
     }
 
+    {
+        let ui_state = ui_state.clone();
+        let last_saved_ui_state = last_saved_ui_state.clone();
+        let home = home.clone();
+        let workflow = workflow.clone();
+        let toolchains = toolchains.clone();
+        let projects = projects.clone();
+        let targets = targets.clone();
+        let console = console.clone();
+        let jobs_history = jobs_history.clone();
+        let evidence = evidence.clone();
+        let settings = settings.clone();
+        glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
+            if let Err(err) = persist_ui_state_snapshot(
+                &ui_state,
+                &last_saved_ui_state,
+                &home,
+                &workflow,
+                &toolchains,
+                &projects,
+                &targets,
+                &console,
+                &jobs_history,
+                &evidence,
+                &settings,
+            ) {
+                eprintln!("Failed to persist UI state: {err}");
+            }
+            glib::ControlFlow::Continue
+        });
+    }
+
     stack.add_titled(&home.page.root, Some("home"), "Job Control");
     stack.add_titled(&workflow.page.root, Some("workflow"), "Workflow");
     stack.add_titled(&toolchains.page.root, Some("toolchains"), "Toolchains");
@@ -1079,6 +1190,7 @@ fn build_ui(app: &gtk::Application) {
     let context_bar_for_events = context_bar.clone();
     let cfg_for_events = cfg.clone();
     let ui_state_for_events = ui_state.clone();
+    let last_saved_ui_state_for_events = last_saved_ui_state.clone();
     let pending_project_prompt_for_events = pending_project_prompt.clone();
     let window_for_events = window.clone();
     let cmd_tx_for_events = cmd_tx.clone();
@@ -1400,6 +1512,11 @@ fn build_ui(app: &gtk::Application) {
                                 let mut state = ui_state_for_events.lock().unwrap();
                                 *state = default_state.clone();
                             }
+                            {
+                                let mut last_saved =
+                                    last_saved_ui_state_for_events.lock().unwrap();
+                                *last_saved = None;
+                            }
                             apply_ui_state(
                                 &default_state,
                                 &home_page_for_events,
@@ -1454,6 +1571,10 @@ fn build_ui(app: &gtk::Application) {
                             let mut state_guard = ui_state_for_events.lock().unwrap();
                             *state_guard = state.clone();
                         }
+                        {
+                            let mut last_saved = last_saved_ui_state_for_events.lock().unwrap();
+                            *last_saved = if loaded { Some(state.clone()) } else { None };
+                        }
                         if loaded {
                             apply_ui_state(
                                 &state,
@@ -1491,6 +1612,7 @@ fn build_ui(app: &gtk::Application) {
 
     {
         let ui_state = ui_state.clone();
+        let last_saved_ui_state = last_saved_ui_state.clone();
         let home = home.clone();
         let workflow = workflow.clone();
         let toolchains = toolchains.clone();
@@ -1501,9 +1623,9 @@ fn build_ui(app: &gtk::Application) {
         let evidence = evidence.clone();
         let settings = settings.clone();
         window.connect_close_request(move |_| {
-            let mut state = ui_state.lock().unwrap();
-            capture_ui_state(
-                &mut state,
+            if let Err(err) = persist_ui_state_snapshot(
+                &ui_state,
+                &last_saved_ui_state,
                 &home,
                 &workflow,
                 &toolchains,
@@ -1513,8 +1635,7 @@ fn build_ui(app: &gtk::Application) {
                 &jobs_history,
                 &evidence,
                 &settings,
-            );
-            if let Err(err) = state.save() {
+            ) {
                 eprintln!("Failed to persist UI state: {err}");
             }
             glib::Propagation::Proceed

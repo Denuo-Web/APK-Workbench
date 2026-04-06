@@ -85,6 +85,7 @@ Update this file whenever UI behavior changes or when commits touching this crat
 - Settings shows telemetry log/crash locations and provides buttons to open the folders.
 - State archive operations block if the latest job is queued/running and serialize via a FIFO queue under ~/.local/share/apkw/state-ops.
 - Open State reloads all services via ReloadState RPCs and refreshes the UI config from disk.
+- State archive opens now restore from a staging directory under `state-ops` on the APKW data filesystem and reject archives with no restorable entries, avoiding destructive clears before validation and cross-device rename failures.
 - Reset-all-state (triggered by the header New project flow) clears the Evidence log buffer via `Page::clear` since Evidence is a bare `Page`; the new project flow now warns and continues to the folder picker if the reset fails.
 - Project open/create and target install actions now prompt for a folder/APK when the path is blank, and project folder picks auto-open existing projects when metadata is present.
 - Opening existing projects resets the Projects template selection to None; Targets defaults no longer force the SampleConsole application id and attempt to infer it from app Gradle or manifest when unset.
@@ -107,7 +108,7 @@ Update this file whenever UI behavior changes or when commits touching this crat
 - State archive Save/Open dialogs clone their queue callbacks per click so GTK can reuse the button handlers.
 - Project templates auto-load on app startup and whenever the Projects tab becomes visible.
 - UI sources are kept rustfmt-formatted to align with workspace style.
-- UI log persistence now updates `ui-state.json` per AppEvent log line instead of scraping text buffers on close.
+- UI logs append to in-memory state per AppEvent, and a periodic snapshot writes `ui-state.json` only when the captured UI state changes; the header Save state action forces a fresh snapshot before zipping the state directory.
 - `AppEvent::ConfigReloaded` now boxes `AppConfig`, and `UiState`/`BuildState`/`SettingsState`/`AppState` derive `Default`; rustfmt import/whitespace cleanup applied (no behavior change).
 
 ## Prioritized TODO checklist by service

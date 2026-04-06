@@ -7,7 +7,7 @@ use crate::config::data_dir;
 const UI_STATE_FILE: &str = "ui-state.json";
 const LOG_MAX_CHARS: usize = 200_000;
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct UiState {
     pub(crate) home: HomeState,
@@ -21,7 +21,7 @@ pub(crate) struct UiState {
     pub(crate) settings: SettingsState,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct HomeState {
     pub(crate) log: String,
@@ -34,7 +34,7 @@ pub(crate) struct HomeState {
     pub(crate) watch_job_id: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct WorkflowState {
     pub(crate) log: String,
@@ -68,7 +68,7 @@ pub(crate) struct WorkflowState {
     pub(crate) step_evidence: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct ToolchainsState {
     pub(crate) log: String,
@@ -90,7 +90,7 @@ pub(crate) struct ToolchainsState {
     pub(crate) active_set_id: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct ProjectsState {
     pub(crate) log: String,
@@ -105,7 +105,7 @@ pub(crate) struct ProjectsState {
     pub(crate) default_target_id: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct TargetsState {
     pub(crate) log: String,
@@ -121,7 +121,7 @@ pub(crate) struct TargetsState {
     pub(crate) activity: String,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct BuildState {
     pub(crate) log: String,
@@ -142,7 +142,7 @@ pub(crate) struct BuildState {
     pub(crate) artifact_path: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct JobsHistoryState {
     pub(crate) log: String,
@@ -164,7 +164,7 @@ pub(crate) struct JobsHistoryState {
     pub(crate) output_path: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct EvidenceState {
     pub(crate) log: String,
@@ -185,7 +185,7 @@ pub(crate) struct EvidenceState {
     pub(crate) include_recent: bool,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct SettingsState {
     pub(crate) log: String,
@@ -427,9 +427,12 @@ fn ui_state_path() -> PathBuf {
 }
 
 fn trim_log(text: &str) -> String {
-    let char_count = text.chars().count();
-    if char_count <= LOG_MAX_CHARS {
+    if text.len() <= LOG_MAX_CHARS {
         return text.to_string();
     }
-    text.chars().skip(char_count - LOG_MAX_CHARS).collect()
+    let mut start = text.len() - LOG_MAX_CHARS;
+    while start < text.len() && !text.is_char_boundary(start) {
+        start += 1;
+    }
+    text[start..].to_string()
 }
