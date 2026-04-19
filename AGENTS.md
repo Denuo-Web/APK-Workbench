@@ -121,6 +121,9 @@ Default addresses (override with env vars):
 - Shared JSON state writes now use unique synced temp files before rename, and state-archive opens stage extracted contents under `state-ops` on the target filesystem while rejecting archives with no restorable APKW entries.
 - UI header New project runs reset-all-state then opens the project folder picker; Open project uses the picker and auto-opens existing projects.
 - UI state snapshots now autosave while the app is open, and the header Save state action flushes a fresh UI snapshot before creating the zip archive.
+- UI shell now applies a shared GTK CSS layer for the left rail, intro cards, section frames, and
+  per-tab output panels; every tab output log includes Copy/Clear controls and primary/destructive
+  actions are emphasized consistently on major workflows.
 
 ## Shared data and locations
 - Job state: ~/.local/share/apkw/state/jobs.json

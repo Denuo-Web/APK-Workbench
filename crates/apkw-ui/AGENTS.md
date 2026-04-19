@@ -25,6 +25,8 @@ Update this file whenever UI behavior changes or when commits touching this crat
 - The main window default size is clamped to 90% of the primary monitor so it stays on-screen.
 - Each page is wrapped in a scroller so tall control layouts remain usable on smaller screens.
 - Page layouts now use consistent section frames and spacing via helpers in `pages.rs` to improve scanability.
+- The GTK shell now loads an app-local CSS layer for the left rail, brand/context cards, page intro cards,
+  section frames, and output panels so the UI keeps a consistent visual hierarchy without page-specific styling.
 - Job stream output for service pages prints summary lines for state/progress/completion and decodes log chunks to text instead of raw payload bytes.
 - Settings includes opt-in telemetry toggles for writing local usage/crash reports (env overrides: APKW_TELEMETRY/APKW_TELEMETRY_CRASH).
 - Settings includes local state archive Save/Open/Reload controls with archive exclusions and zip path selection.
@@ -56,6 +58,7 @@ Update this file whenever UI behavior changes or when commits touching this crat
   from correlation_id for run-aware services.
 - Log text views apply a ring buffer to cap memory by line/character counts; each tab shows a separator
   bar between the main controls and the console output.
+- Each tab output panel now includes Copy output and Clear output controls above the log view.
 - The UI tracks an active context (project/toolchain set/target/run) persisted in ui-config, surfaces
   it above the sidebar tab list, and applies it to Workflow/Projects/Targets/Build fields.
 - Per-tab UI state (inputs + log buffers) persists to `~/.local/share/apkw/state/ui-state.json`;
@@ -63,6 +66,9 @@ Update this file whenever UI behavior changes or when commits touching this crat
   and Cuttlefish data (keeps `state/toolchains.json`).
 - Workflow run responses, toolchain active set updates, and target default updates sync the active context.
 - The header actions include compact New project (reset-all-state clears local state/logs while preserving `toolchains`, `downloads`, `cuttlefish`, and `state/toolchains.json`, then opens the project folder picker; if the reset reports failure, the UI still clears active context and prompts for a project folder while warning in Projects/Settings) plus Save/Open state shortcuts that sit above the tab list and open the zip picker immediately with Settings exclusions.
+- The left rail now includes an app brand card and full-width workspace shortcut buttons; major
+  actions such as Start job, Run pipeline, Build, Create project, Start/Stop Cuttlefish, Install
+  APK, and Save state use consistent primary/destructive emphasis across pages.
 
 ## Service coverage
 - Job Control: start arbitrary jobs (including workflow.pipeline) with params/ids + optional correlation id, watch job streams, live status panel.
@@ -109,6 +115,8 @@ Update this file whenever UI behavior changes or when commits touching this crat
 - Project templates auto-load on app startup and whenever the Projects tab becomes visible.
 - UI sources are kept rustfmt-formatted to align with workspace style.
 - UI logs append to in-memory state per AppEvent, and a periodic snapshot writes `ui-state.json` only when the captured UI state changes; the header Save state action forces a fresh snapshot before zipping the state directory.
+- Settings, Job History, and other tabs now route all major content blocks through the shared
+  `section_frame` helper so spacing/padding stays uniform across the app.
 - `AppEvent::ConfigReloaded` now boxes `AppConfig`, and `UiState`/`BuildState`/`SettingsState`/`AppState` derive `Default`; rustfmt import/whitespace cleanup applied (no behavior change).
 
 ## Prioritized TODO checklist by service

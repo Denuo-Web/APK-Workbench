@@ -891,10 +891,40 @@ const COL_SPACING: i32 = 8;
 const INTRO_SPACING: i32 = 4;
 const PAGE_MARGIN: i32 = 12;
 
+fn buffer_text(buffer: &gtk::TextBuffer) -> String {
+    let start = buffer.start_iter();
+    let end = buffer.end_iter();
+    buffer.text(&start, &end, false).to_string()
+}
+
+fn style_primary_button(button: &gtk::Button) {
+    button.add_css_class("suggested-action");
+    button.add_css_class("apkw-primary-action");
+}
+
+fn style_destructive_button(button: &gtk::Button) {
+    button.add_css_class("destructive-action");
+    button.add_css_class("apkw-destructive-action");
+}
+
 fn section_frame<W: gtk::prelude::IsA<gtk::Widget>>(title: &str, child: &W) -> gtk::Frame {
-    let frame = gtk::Frame::builder().label(title).build();
+    let frame = gtk::Frame::new(None);
     frame.set_hexpand(true);
-    frame.set_child(Some(child));
+    frame.add_css_class("apkw-section");
+
+    let label = gtk::Label::builder().label(title).xalign(0.0).build();
+    label.add_css_class("heading");
+    label.add_css_class("apkw-section-title");
+    frame.set_label_widget(Some(&label));
+
+    let body = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    body.add_css_class("apkw-section-body");
+    body.set_margin_top(12);
+    body.set_margin_bottom(12);
+    body.set_margin_start(12);
+    body.set_margin_end(12);
+    body.append(child);
+    frame.set_child(Some(&body));
     frame
 }
 
@@ -907,6 +937,7 @@ fn make_sections_container(page: &Page) -> gtk::Box {
 
 fn make_page(title: &str, description: &str, connections: &str) -> Page {
     let container = gtk::Box::new(gtk::Orientation::Vertical, SECTION_SPACING);
+    container.add_css_class("apkw-page-body");
     container.set_margin_top(PAGE_MARGIN);
     container.set_margin_bottom(PAGE_MARGIN);
     container.set_margin_start(PAGE_MARGIN);
@@ -917,6 +948,7 @@ fn make_page(title: &str, description: &str, connections: &str) -> Page {
         .xalign(0.0)
         .css_classes(vec!["title-2"])
         .build();
+    header.add_css_class("apkw-page-title");
 
     let description_label = gtk::Label::builder()
         .label(description)
@@ -924,6 +956,7 @@ fn make_page(title: &str, description: &str, connections: &str) -> Page {
         .wrap(true)
         .css_classes(vec!["dim-label"])
         .build();
+    description_label.add_css_class("apkw-page-description");
 
     let connections_label = gtk::Label::builder()
         .label(connections)
@@ -931,8 +964,10 @@ fn make_page(title: &str, description: &str, connections: &str) -> Page {
         .wrap(true)
         .css_classes(vec!["dim-label"])
         .build();
+    connections_label.add_css_class("apkw-page-connections");
 
     let intro = gtk::Box::new(gtk::Orientation::Vertical, INTRO_SPACING);
+    intro.add_css_class("apkw-page-intro");
     intro.append(&header);
     intro.append(&description_label);
     intro.append(&connections_label);
@@ -943,12 +978,19 @@ fn make_page(title: &str, description: &str, connections: &str) -> Page {
         .hscrollbar_policy(gtk::PolicyType::Automatic)
         .vscrollbar_policy(gtk::PolicyType::Automatic)
         .build();
+    log_scroller.add_css_class("apkw-log-scroller");
 
     let textview = gtk::TextView::builder()
         .editable(false)
         .monospace(true)
         .wrap_mode(gtk::WrapMode::None)
         .build();
+    textview.add_css_class("apkw-log-view");
+    textview.set_cursor_visible(false);
+    textview.set_top_margin(10);
+    textview.set_bottom_margin(10);
+    textview.set_left_margin(10);
+    textview.set_right_margin(10);
 
     let buffer = textview.buffer();
     log_scroller.set_child(Some(&textview));
@@ -961,17 +1003,69 @@ fn make_page(title: &str, description: &str, connections: &str) -> Page {
         .hscrollbar_policy(gtk::PolicyType::Automatic)
         .vscrollbar_policy(gtk::PolicyType::Always)
         .build();
+    content_scroller.add_css_class("apkw-page-scroller");
     content_scroller.set_child(Some(&container));
 
-    let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    let log_title = gtk::Label::builder()
+        .label("Activity log")
+        .xalign(0.0)
+        .build();
+    log_title.add_css_class("heading");
+    log_title.add_css_class("apkw-log-title");
+
+    let log_caption = gtk::Label::builder()
+        .label("RPC results, job events, and helper output from this page.")
+        .xalign(0.0)
+        .wrap(true)
+        .build();
+    log_caption.add_css_class("dim-label");
+    log_caption.add_css_class("apkw-log-caption");
+
+    let copy_btn = gtk::Button::with_label("Copy output");
+    let clear_btn = gtk::Button::with_label("Clear output");
+    copy_btn.add_css_class("flat");
+    clear_btn.add_css_class("flat");
+    copy_btn.add_css_class("apkw-log-action");
+    clear_btn.add_css_class("apkw-log-action");
+
+    let buffer_copy = buffer.clone();
+    copy_btn.connect_clicked(move |_| {
+        if let Some(display) = gtk::gdk::Display::default() {
+            display.clipboard().set_text(&buffer_text(&buffer_copy));
+        }
+    });
+
+    let buffer_clear = buffer.clone();
+    clear_btn.connect_clicked(move |_| {
+        buffer_clear.set_text("");
+    });
+
+    let log_text = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    log_text.set_hexpand(true);
+    log_text.append(&log_title);
+    log_text.append(&log_caption);
+
+    let log_actions = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+    log_actions.set_halign(gtk::Align::End);
+    log_actions.append(&copy_btn);
+    log_actions.append(&clear_btn);
+
+    let log_header = gtk::Box::new(gtk::Orientation::Horizontal, ROW_SPACING);
+    log_header.add_css_class("apkw-log-header");
+    log_header.append(&log_text);
+    log_header.append(&log_actions);
+
+    let log_panel = gtk::Box::new(gtk::Orientation::Vertical, ROW_SPACING);
+    log_panel.add_css_class("apkw-log-panel");
+    log_panel.append(&log_header);
+    log_panel.append(&log_scroller);
+
+    let root = gtk::Box::new(gtk::Orientation::Vertical, SECTION_SPACING);
+    root.add_css_class("apkw-page-root");
     root.set_hexpand(true);
     root.set_vexpand(true);
     root.append(&content_scroller);
-    let log_separator = gtk::Separator::new(gtk::Orientation::Horizontal);
-    log_separator.set_margin_top(6);
-    log_separator.set_margin_bottom(6);
-    root.append(&log_separator);
-    root.append(&log_scroller);
+    root.append(&log_panel);
 
     let log_scroller_for_size = log_scroller.clone();
     let last_height = Cell::new(0);
@@ -1132,6 +1226,8 @@ pub(crate) fn page_home(
         .hexpand(true)
         .build();
     let watch_btn = gtk::Button::with_label("Watch");
+    style_primary_button(&start_btn);
+    style_destructive_button(&cancel_btn);
     set_tooltip(&start_btn, "What: Start the job with the provided fields. Why: submits to JobService and begins streaming events. How: fill inputs then click.");
     set_tooltip(&cancel_btn, "What: Cancel the current tracked job. Why: stop a long running job from Job Control. How: click after a job is started or watched.");
     set_tooltip(&watch_entry, "What: Job id to watch. Why: stream logs and status for an existing job. How: paste a job id from Job History or other tabs.");
@@ -1518,6 +1614,7 @@ pub(crate) fn page_workflow(
     let action_row = gtk::Box::new(gtk::Orientation::Horizontal, ROW_SPACING);
     let run_btn = gtk::Button::with_label("Run pipeline");
     let stream_btn = gtk::Button::with_label("Stream run events");
+    style_primary_button(&run_btn);
     set_tooltip(&run_btn, "What: Start the workflow pipeline. Why: orchestrate multi-service steps in order. How: fill inputs and click.");
     set_tooltip(&stream_btn, "What: Stream run-level events. Why: watch pipeline progress across jobs. How: enter run id or correlation id and click.");
     action_row.append(&run_btn);
@@ -1769,7 +1866,6 @@ pub(crate) fn page_jobs_history(
     );
     let sections = make_sections_container(&page);
 
-    let list_frame = gtk::Frame::builder().label("List jobs").build();
     let list_grid = gtk::Grid::builder()
         .row_spacing(ROW_SPACING)
         .column_spacing(COL_SPACING)
@@ -1844,9 +1940,7 @@ pub(crate) fn page_jobs_history(
     list_grid.attach(&page_token_entry, 1, 8, 1, 1);
     list_grid.attach(&list_btn, 1, 9, 1, 1);
 
-    list_frame.set_child(Some(&list_grid));
-
-    let history_frame = gtk::Frame::builder().label("Job history").build();
+    let list_frame = section_frame("List jobs", &list_grid);
     let history_grid = gtk::Grid::builder()
         .row_spacing(ROW_SPACING)
         .column_spacing(COL_SPACING)
@@ -1906,7 +2000,7 @@ pub(crate) fn page_jobs_history(
     history_grid.attach(&list_history_btn, 1, 7, 1, 1);
     history_grid.attach(&export_btn, 1, 8, 1, 1);
 
-    history_frame.set_child(Some(&history_grid));
+    let history_frame = section_frame("Job history", &history_grid);
 
     sections.append(&list_frame);
     sections.append(&history_frame);
@@ -2122,6 +2216,8 @@ pub(crate) fn page_toolchains(
     let install_ndk = gtk::Button::with_label("Install NDK");
     let list_installed = gtk::Button::with_label("List installed");
     let verify_installed = gtk::Button::with_label("Verify installed");
+    style_primary_button(&install_sdk);
+    style_primary_button(&install_ndk);
     set_tooltip(&install_sdk, "What: Install the selected SDK version. Why: makes the SDK available for builds. How: pick a version, set optional job/correlation ids, then click.");
     set_tooltip(&install_ndk, "What: Install the selected NDK version. Why: builds with native code require the NDK. How: pick a version, set optional job/correlation ids, then click.");
     set_tooltip(&list_installed, "What: List installed toolchains. Why: verify what is already available. How: click to query ToolchainService.");
@@ -2224,6 +2320,7 @@ pub(crate) fn page_toolchains(
         .build();
     let set_active_btn = gtk::Button::with_label("Set active");
     let get_active_btn = gtk::Button::with_label("Get active");
+    style_primary_button(&create_set_btn);
     set_tooltip(&sdk_set_entry, "What: SDK toolchain id for the set. Why: sets tie specific SDK/NDK versions together. How: paste an SDK toolchain id.");
     set_tooltip(&ndk_set_entry, "What: NDK toolchain id for the set. Why: sets tie specific SDK/NDK versions together. How: paste an NDK toolchain id.");
     set_tooltip(&display_name_entry, "What: Display name for the toolchain set. Why: human-friendly label used in other tabs. How: type a short descriptive name.");
@@ -2702,6 +2799,7 @@ pub(crate) fn page_projects(
     let refresh_defaults = gtk::Button::with_label("Refresh defaults");
     let list_recent = gtk::Button::with_label("List recent");
     let create_btn = gtk::Button::with_label("Create project");
+    style_primary_button(&create_btn);
     set_tooltip(&refresh_templates, "What: Reload template list. Why: reflect new or updated templates. How: click to query ProjectService.");
     set_tooltip(&refresh_defaults, "What: Reload active defaults. Why: keep dropdowns in sync with Toolchain/Target defaults. How: click to fetch from ProjectService.");
     set_tooltip(&list_recent, "What: List recent projects. Why: reuse recent workspaces. How: click to query ProjectService.");
@@ -2792,6 +2890,7 @@ pub(crate) fn page_projects(
     default_target_combo.set_active(Some(0));
     let config_btn = gtk::Button::with_label("Set config");
     let use_defaults_btn = gtk::Button::with_label("Use active defaults");
+    style_primary_button(&config_btn);
     set_tooltip(&project_id_entry, "What: Project id to update config for. Why: set defaults on a specific project. How: copy an id from ProjectService output or Job History (auto-filled after create/open).");
     set_tooltip(&toolchain_set_combo, "What: Default toolchain set for the project. Why: builds and workflows can use it when none is specified. How: pick a set (or None).");
     set_tooltip(&default_target_combo, "What: Default target for the project. Why: target-aware workflows can use it when none is specified. How: pick a target (or None).");
@@ -3069,6 +3168,8 @@ pub(crate) fn page_targets(
     let stop = gtk::Button::with_label("Stop");
     status.set_label("Status (unknown)");
     stop.set_sensitive(true);
+    style_primary_button(&start);
+    style_destructive_button(&stop);
     set_tooltip(&status, "What: Check Cuttlefish status. Why: verify host readiness and running state. How: click to query TargetService.");
     set_tooltip(&web_ui, "What: Open the Cuttlefish WebRTC UI in your browser. Why: access the virtual device UI. How: click; uses APKW_CUTTLEFISH_WEBRTC_URL or https://localhost:8443.");
     set_tooltip(&env_ui, "What: Open the Cuttlefish environment control UI. Why: manage environment toggles. How: click; uses APKW_CUTTLEFISH_ENV_URL or https://localhost:1443.");
@@ -3158,6 +3259,7 @@ pub(crate) fn page_targets(
     sections.append(&cuttlefish_frame);
 
     let embedded_reload = gtk::Button::with_label("Reload embedded");
+    style_primary_button(&embedded_reload);
     set_tooltip(&embedded_reload, "What: Reload the embedded Cuttlefish viewer inside the GTK app. Why: retry the WebRTC page after start/restart without leaving the app. How: click after Cuttlefish is running, or use it to probe the configured URL.");
 
     let embedded_actions = gtk::Box::new(gtk::Orientation::Horizontal, ROW_SPACING);
@@ -3268,6 +3370,7 @@ pub(crate) fn page_targets(
     let action_row = gtk::Box::new(gtk::Orientation::Horizontal, ROW_SPACING);
     let install_apk = gtk::Button::with_label("Install APK");
     let launch_app = gtk::Button::with_label("Launch app");
+    style_primary_button(&install_apk);
     set_tooltip(&install_apk, "What: Install APK on the target. Why: deploy build output for testing. How: set Target id and APK path or leave blank to pick an APK.");
     set_tooltip(&launch_app, "What: Launch the app on the target. Why: verify install and run. How: set Target id, application id, and activity, then click.");
     action_row.append(&install_apk);
@@ -3767,6 +3870,7 @@ pub(crate) fn page_console(
     let clean_check = gtk::CheckButton::with_label("Clean first");
 
     let run = gtk::Button::with_label("Build");
+    style_primary_button(&run);
     set_tooltip(&project_entry, "What: Project path or project id. Why: BuildService resolves the project root from this reference. How: paste a filesystem path or a recent project id (auto-filled after create/open).");
     set_tooltip(&project_browse, "What: Open a folder picker for the project. Why: choose a valid project path quickly. How: click and select a folder.");
     set_tooltip(&module_entry, "What: Gradle module to build (optional). Why: target a single module instead of the whole project. How: enter app or :app.");
@@ -4101,6 +4205,7 @@ pub(crate) fn page_evidence(
     let stream_run = gtk::Button::with_label("Stream run events");
     let list_outputs = gtk::Button::with_label("List outputs");
     let export_job_logs = gtk::Button::with_label("Export job logs");
+    style_primary_button(&export_evidence);
     set_tooltip(&list_jobs, "What: List jobs for a run id or correlation id. Why: group pipeline jobs together. How: enter run id/correlation id and click.");
     set_tooltip(&stream_run, "What: Stream run-level events. Why: watch pipeline progress across jobs. How: enter run id or correlation id and click.");
     set_tooltip(&list_outputs, "What: List outputs (bundles/artifacts) for a run. Why: discover bundle paths and build artifacts tied to the run. How: set filters and click.");
@@ -4626,7 +4731,6 @@ pub(crate) fn page_settings(
     let endpoints_frame = section_frame("Service endpoints", &form);
     sections.append(&endpoints_frame);
 
-    let state_frame = gtk::Frame::builder().label("State archives").build();
     let state_box = gtk::Box::new(gtk::Orientation::Vertical, 6);
     let state_intro = gtk::Label::builder()
         .label("Save or open the local APKW state directory (zip). Exclusions skip large folders; state-exports and state-ops are always excluded.")
@@ -4660,6 +4764,7 @@ pub(crate) fn page_settings(
         .build();
     let save_browse = gtk::Button::with_label("Browse...");
     let save_btn = gtk::Button::with_label("Save state");
+    style_primary_button(&save_btn);
     set_tooltip(&save_entry, "What: Output zip path. Why: choose where to store the archive. How: type a path or use Browse.");
     set_tooltip(
         &save_browse,
@@ -4823,10 +4928,9 @@ pub(crate) fn page_settings(
             .ok();
     });
 
-    state_frame.set_child(Some(&state_box));
+    let state_frame = section_frame("State archives", &state_box);
     sections.append(&state_frame);
 
-    let telemetry_frame = gtk::Frame::builder().label("Telemetry (opt-in)").build();
     let telemetry_box = gtk::Box::new(gtk::Orientation::Vertical, 6);
     let usage_check = gtk::CheckButton::with_label("Write usage analytics");
     let crash_check = gtk::CheckButton::with_label("Write crash reports");
@@ -4937,7 +5041,7 @@ pub(crate) fn page_settings(
     telemetry_box.append(&telemetry_crashes_label);
     telemetry_box.append(&open_telemetry);
     telemetry_box.append(&open_crashes);
-    telemetry_frame.set_child(Some(&telemetry_box));
+    let telemetry_frame = section_frame("Telemetry (opt-in)", &telemetry_box);
     sections.append(&telemetry_frame);
 
     SettingsPage {

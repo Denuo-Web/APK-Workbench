@@ -81,6 +81,127 @@ fn telemetry_env_override(name: &str) -> Option<bool> {
     }
 }
 
+const APKW_APP_CSS: &str = r#"
+window.apkw-app {
+  background-color: @window_bg_color;
+}
+
+.apkw-left-rail {
+  background-image: linear-gradient(180deg, shade(@window_bg_color, 1.02), shade(@window_bg_color, 0.98));
+  border-right: 1px solid alpha(@borders, 0.72);
+}
+
+box.apkw-brand,
+frame.apkw-context-card > border,
+box.apkw-page-intro,
+frame.apkw-section > border,
+box.apkw-log-panel {
+  border-radius: 16px;
+}
+
+box.apkw-brand {
+  margin: 8px;
+  padding: 16px;
+  background-image: linear-gradient(135deg, alpha(@accent_bg_color, 0.20), alpha(@accent_bg_color, 0.06));
+  border: 1px solid alpha(@accent_bg_color, 0.22);
+}
+
+label.apkw-brand-title {
+  font-weight: 700;
+}
+
+label.apkw-brand-copy {
+  opacity: 0.88;
+}
+
+frame.apkw-context-card > border {
+  background-color: alpha(@card_bg_color, 0.90);
+  border-color: alpha(@borders, 0.72);
+}
+
+label.apkw-context-line {
+  font-weight: 600;
+}
+
+button,
+entry,
+combobox,
+dropdown {
+  border-radius: 10px;
+}
+
+button.apkw-rail-button {
+  min-height: 38px;
+  border-radius: 12px;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+button.apkw-primary-action,
+button.apkw-destructive-action,
+button.apkw-rail-button.suggested-action {
+  font-weight: 700;
+}
+
+box.apkw-page-intro {
+  padding: 16px;
+  background-image: linear-gradient(180deg, alpha(@card_bg_color, 0.96), alpha(@card_bg_color, 0.80));
+  border: 1px solid alpha(@borders, 0.72);
+}
+
+frame.apkw-section > border {
+  background-color: alpha(@card_bg_color, 0.88);
+  border-color: alpha(@borders, 0.72);
+}
+
+label.apkw-section-title,
+label.apkw-log-title {
+  font-weight: 700;
+}
+
+box.apkw-log-panel {
+  padding: 12px;
+  background-color: alpha(@view_bg_color, 0.82);
+  border: 1px solid alpha(@borders, 0.78);
+}
+
+textview.apkw-log-view,
+textview.apkw-log-view text {
+  background-color: alpha(@view_bg_color, 0.97);
+}
+
+button.apkw-log-action {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+stacksidebar.apkw-sidebar row {
+  margin: 2px 8px;
+  border-radius: 12px;
+}
+
+stacksidebar.apkw-sidebar row:selected,
+stacksidebar.apkw-sidebar row:hover {
+  background-color: alpha(@accent_bg_color, 0.12);
+}
+
+stacksidebar.apkw-sidebar label {
+  font-weight: 600;
+}
+"#;
+
+fn install_app_css() {
+    let provider = gtk::CssProvider::new();
+    provider.load_from_data(APKW_APP_CSS);
+    if let Some(display) = gdk::Display::default() {
+        gtk::style_context_add_provider_for_display(
+            &display,
+            &provider,
+            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+    }
+}
+
 #[derive(Clone)]
 struct ContextBar {
     project_label: gtk::Label,
@@ -703,6 +824,8 @@ fn build_ui(app: &gtk::Application) {
         .default_height(default_height)
         .resizable(true)
         .build();
+    install_app_css();
+    window.add_css_class("apkw-app");
 
     let cfg = Arc::new(std::sync::Mutex::new(AppConfig::load()));
     let (initial_state, has_ui_state) = UiState::load_with_status();
@@ -807,8 +930,10 @@ fn build_ui(app: &gtk::Application) {
 
     // Layout: context + actions + sidebar + stack
     let root = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    root.add_css_class("apkw-root");
     let sidebar_width = 220;
-    let left_column = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    let left_column = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    left_column.add_css_class("apkw-left-rail");
     left_column.set_width_request(sidebar_width);
     left_column.set_hexpand(false);
     left_column.set_vexpand(true);
@@ -818,14 +943,38 @@ fn build_ui(app: &gtk::Application) {
         .hexpand(true)
         .vexpand(true)
         .build();
+    stack.set_margin_top(8);
+    stack.set_margin_bottom(8);
+    stack.set_margin_start(8);
+    stack.set_margin_end(10);
 
     let sidebar = gtk::StackSidebar::builder()
         .stack(&stack)
         .width_request(sidebar_width)
         .build();
+    sidebar.add_css_class("apkw-sidebar");
     sidebar.set_vexpand(true);
 
+    let brand_box = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    brand_box.add_css_class("apkw-brand");
+    let brand_title = gtk::Label::builder()
+        .label("APK Workbench")
+        .xalign(0.0)
+        .css_classes(vec!["title-3"])
+        .build();
+    brand_title.add_css_class("apkw-brand-title");
+    let brand_copy = gtk::Label::builder()
+        .label("Projects, builds, targets, and run evidence in one GTK workspace.")
+        .xalign(0.0)
+        .wrap(true)
+        .build();
+    brand_copy.add_css_class("dim-label");
+    brand_copy.add_css_class("apkw-brand-copy");
+    brand_box.append(&brand_title);
+    brand_box.append(&brand_copy);
+
     let context_frame = gtk::Frame::builder().label("Active context").build();
+    context_frame.add_css_class("apkw-context-card");
     context_frame.set_margin_top(8);
     context_frame.set_margin_bottom(6);
     context_frame.set_margin_start(8);
@@ -846,6 +995,7 @@ fn build_ui(app: &gtk::Application) {
     let target_label = gtk::Label::builder().label("Target: -").xalign(0.0).build();
     let run_label = gtk::Label::builder().label("Run: -").xalign(0.0).build();
     for label in [&project_label, &toolchain_label, &target_label, &run_label] {
+        label.add_css_class("apkw-context-line");
         label.set_ellipsize(EllipsizeMode::End);
         label.set_max_width_chars(28);
     }
@@ -864,9 +1014,11 @@ fn build_ui(app: &gtk::Application) {
     let save_state_btn = gtk::Button::with_label("Save state");
     let open_state_btn = gtk::Button::with_label("Open state");
     for btn in [&new_project_btn, &save_state_btn, &open_state_btn] {
-        btn.set_halign(gtk::Align::Start);
-        btn.add_css_class("flat");
+        btn.set_halign(gtk::Align::Fill);
+        btn.set_hexpand(true);
+        btn.add_css_class("apkw-rail-button");
     }
+    new_project_btn.add_css_class("suggested-action");
     set_tooltip(
         &new_project_btn,
         "What: Start a new project. Why: reset local state and pick a workspace. How: confirm reset, then choose a project folder.",
@@ -890,6 +1042,7 @@ fn build_ui(app: &gtk::Application) {
 
     context_frame.set_child(Some(&context_grid));
 
+    left_column.append(&brand_box);
     left_column.append(&context_frame);
     left_column.append(&action_row);
     left_column.append(&sidebar);
