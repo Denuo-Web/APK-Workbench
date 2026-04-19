@@ -8,6 +8,9 @@ The format is based on Keep a Changelog and the project versioning follows Seman
 
 ### Changed
 - Repository metadata, release docs, and README links now point at `github.com/Denuo-Web/APK-Workshop` after the GitHub owner/repository move.
+- Added an external-project Gradle wrapper at `scripts/dev/apkw-gradle.sh` and documented it as the preferred way to build sibling Android repos with APK Workbench-managed ARM64 SDK/NDK plus the correct `aapt2` override.
+- APK Workbench Android environment detection now checks both `~/.local/share/apkw/toolchains` and legacy `~/.local/share/aadk/toolchains` so existing ARM64 toolchain installs are reused automatically.
+- The external-project Gradle wrapper now prefers APK Workbench-managed toolchains over inherited shell `ANDROID_*` variables by default so stale system SDK exports do not silently push builds back onto x86-era tooling.
 
 ## [0.2.0] - 2026-04-06
 

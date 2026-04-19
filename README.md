@@ -40,6 +40,7 @@ streams job state/progress/logs to clients.
 - Proto contracts: `proto/apkw/v1`
 - Rust gRPC types: `crates/apkw-proto`
 - Dev runner: `scripts/dev/run-all.sh`
+- External Gradle wrapper: `scripts/dev/apkw-gradle.sh`
 - Agent notes: `AGENTS.md` and `crates/*/AGENTS.md`
 
 ## Runtime topology
@@ -167,6 +168,27 @@ cargo run -p apkw-cli -- targets list
 cargo run -p apkw-cli -- observe list-runs
 cargo run -p apkw-cli -- observe export-support
 cargo run -p apkw-cli -- project use-active-defaults <project_id>
+```
+
+## Building another Android project with APK Workbench toolchains
+When you are working in a separate Android app repo on this ARM64 host, use the APK Workbench
+wrapper instead of calling `./gradlew` directly. It auto-detects the local ARM64 SDK/NDK, chooses
+the installed `aapt2`, and fills in the Gradle property override that otherwise tends to fall back
+to incompatible x86 tooling. It also understands both the current `~/.local/share/apkw/toolchains`
+layout and the legacy `~/.local/share/aadk/toolchains` layout. By default it prefers APK
+Workbench-managed toolchains even if your shell already exports `ANDROID_SDK_ROOT`; set
+`APKW_GRADLE_RESPECT_EXISTING_ENV=1` if you explicitly want to keep the current shell SDK/NDK env.
+
+```bash
+/home/den/Documents/APK_Workbench/scripts/dev/apkw-gradle.sh \
+  --project-dir /path/to/android-project \
+  assembleDebug
+```
+
+To inspect what environment it would use without running Gradle:
+
+```bash
+/home/den/Documents/APK_Workbench/scripts/dev/apkw-gradle.sh --print-env
 ```
 
 ## Release builds (Linux aarch64)

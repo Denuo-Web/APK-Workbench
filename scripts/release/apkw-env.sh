@@ -162,6 +162,65 @@ apkw_pick_latest_valid_ndk() {
   return 1
 }
 
+apkw_pick_latest_aapt2() {
+  local sdk_root="$1"
+  local dir
+  local host_arch
+  local file_desc
+
+  [ -n "$sdk_root" ] || return 1
+
+  host_arch="$(uname -m)"
+
+  while IFS= read -r dir; do
+    if [ -x "$dir/aapt2" ]; then
+      file_desc="$(file -b "$dir/aapt2" 2>/dev/null || true)"
+
+      case "$host_arch" in
+        aarch64|arm64)
+          [[ "$file_desc" == *"ARM aarch64"* ]] || continue
+          ;;
+        x86_64|amd64)
+          [[ "$file_desc" == *"x86-64"* ]] || continue
+          ;;
+      esac
+
+      printf '%s' "$dir/aapt2"
+      return 0
+    fi
+  done < <(
+    find "$sdk_root/build-tools" -mindepth 1 -maxdepth 1 -type d -printf '%f %p\n' 2>/dev/null \
+      | sort -Vr \
+      | cut -d' ' -f2-
+  )
+
+  return 1
+}
+
+apkw_sync_sdk_platforms_from_system() {
+  local system_sdk_root="${1:-${APKW_SYSTEM_SDK_ROOT:-$HOME/Android/Sdk}}"
+  local source_platform
+  local platform_name
+  local target_platform
+
+  [ -n "${ANDROID_SDK_ROOT:-}" ] || return 0
+  [ -d "$system_sdk_root/platforms" ] || return 0
+  [ "$system_sdk_root" != "$ANDROID_SDK_ROOT" ] || return 0
+
+  mkdir -p "$ANDROID_SDK_ROOT/platforms"
+
+  for source_platform in "$system_sdk_root"/platforms/android-*; do
+    [ -d "$source_platform" ] || continue
+
+    platform_name="$(basename "$source_platform")"
+    target_platform="$ANDROID_SDK_ROOT/platforms/$platform_name"
+
+    if [ ! -e "$target_platform" ]; then
+      ln -s "$source_platform" "$target_platform"
+    fi
+  done
+}
+
 apkw_prepare_launch_env() {
   local base
   local candidate
@@ -172,7 +231,11 @@ apkw_prepare_launch_env() {
   local supported_java
 
   if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
-    for base in "$HOME/.local/share/apkw/toolchains/android-sdk-custom" "$HOME/Android/Sdk" "$HOME/Android/sdk"; do
+    for base in \
+      "$HOME/.local/share/apkw/toolchains/android-sdk-custom" \
+      "$HOME/.local/share/aadk/toolchains/android-sdk-custom" \
+      "$HOME/Android/Sdk" \
+      "$HOME/Android/sdk"; do
       if sdk_path=$(apkw_pick_latest_valid_sdk "$base"); then
         export ANDROID_SDK_ROOT="$sdk_path"
         export ANDROID_HOME="$sdk_path"
@@ -182,7 +245,11 @@ apkw_prepare_launch_env() {
   fi
 
   if [ -z "${ANDROID_NDK_ROOT:-}" ]; then
-    for base in "$HOME/.local/share/apkw/toolchains/android-ndk-custom" "${ANDROID_SDK_ROOT:-}/ndk" "${ANDROID_SDK_ROOT:-}/ndk-bundle"; do
+    for base in \
+      "$HOME/.local/share/apkw/toolchains/android-ndk-custom" \
+      "$HOME/.local/share/aadk/toolchains/android-ndk-custom" \
+      "${ANDROID_SDK_ROOT:-}/ndk" \
+      "${ANDROID_SDK_ROOT:-}/ndk-bundle"; do
       if ndk_path=$(apkw_pick_latest_valid_ndk "$base"); then
         export ANDROID_NDK_ROOT="$ndk_path"
         export ANDROID_NDK_HOME="$ndk_path"

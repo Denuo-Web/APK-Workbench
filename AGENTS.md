@@ -48,14 +48,17 @@ completed items or move them into the implementation notes.
 - proto/apkw/v1/*.proto: gRPC contracts
 - CHANGELOG.md: release notes and post-tag history used for version increment prep
 - scripts/dev/run-all.sh: local dev runner for all services (uses the shared launcher env helper to auto-export ANDROID_SDK_ROOT/ANDROID_HOME and APKW_ADB_PATH when an SDK is detected)
+- scripts/dev/apkw-gradle.sh: wrapper for building external Android projects with APKW-managed ARM64 SDK/NDK + `aapt2` override; prefer this over plain `./gradlew` when working outside this repo, and note that it prefers APKW-managed toolchains over inherited shell SDK env unless `APKW_GRADLE_RESPECT_EXISTING_ENV=1`
 - scripts/release/common.sh: shared release metadata/helpers (workspace version, supported-host guards, binary list)
-- scripts/release/apkw-env.sh: shared Android/Java environment detection for the dev runner and installed launcher
+- scripts/release/apkw-env.sh: shared Android/Java environment detection for the dev runner and installed launcher; it also recognizes legacy `~/.local/share/aadk/toolchains` installs while the host transitions to `apkw`
 - scripts/release/build.sh: release build + GitHub Releases tarball packaging helper
 - scripts/release/build-deb.sh: Debian (.deb) convenience package builder (templates package metadata/docs and installs the launcher helper)
 - scripts/release/apkw-start.sh: installed launcher (services + UI, logs to ~/.local/share/apkw/logs)
 - packaging/deb/*: Debian packaging metadata (control, desktop entry, postinst/postrm, manpages)
+- LICENSES/third_party/webkit + THIRD_PARTY_NOTICES: staged WebKit/MiniBrowser license texts, provenance, and notices for bundled WebKit runtime artifacts
 - assets/apkw.svg: GTK app icon used by the Debian package
 - docs/release.md: release build steps
+- dist/webkit-builds/<build-id>: staged WebKitGTK MiniBrowser runtime bundles, checksums, manifests, and matching source artifacts when packaging a pinned embedded browser runtime
 - SampleConsole: Minimal Compose sample app (Sample Console) bundled with APKW
 - CS492_Assignment1_RosenauJ/CS492A1RosenauJ: Course assignment sample app
 
@@ -71,6 +74,7 @@ Default addresses (override with env vars):
 
 ## Cross-service flows
 - UI/CLI call gRPC services; they do not implement business logic.
+- For Android app repos outside APKW itself, agents should first try `scripts/dev/apkw-gradle.sh --project-dir <repo> <task>` so builds inherit the ARM64 SDK/NDK and avoid x86 `aapt2` fallbacks.
 - JobService is the event bus. Toolchain/Build/Targets publish job events; UI streams events.
 - Progress payloads include job-specific metrics for build/project/toolchain/target/observe workflows.
 - BuildService resolves project paths via ProjectService GetProject for ids; direct paths are accepted.
