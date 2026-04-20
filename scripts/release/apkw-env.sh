@@ -1,20 +1,6 @@
 #!/usr/bin/env bash
 
-APKW_SUPPORTED_JAVA_MAJORS="${APKW_SUPPORTED_JAVA_MAJORS:-${AADK_SUPPORTED_JAVA_MAJORS:-21 17}}"
-
-apkw_promote_legacy_env() {
-  local key new_key
-
-  while IFS= read -r key; do
-    [ -n "$key" ] || continue
-    new_key="APKW_${key#AADK_}"
-    if [ -z "${!new_key+x}" ]; then
-      export "${new_key}=${!key}"
-    fi
-  done < <(compgen -A variable -- AADK_ || true)
-}
-
-apkw_promote_legacy_env
+APKW_SUPPORTED_JAVA_MAJORS="${APKW_SUPPORTED_JAVA_MAJORS:-21 17}"
 
 apkw_first_supported_java_major() {
   local major
@@ -162,6 +148,102 @@ apkw_pick_latest_valid_ndk() {
   return 1
 }
 
+apkw_detect_host_page_size() {
+  local value="${APKW_HOST_PAGE_SIZE:-}"
+
+  if [[ "$value" =~ ^[0-9]+$ ]] && [ "$value" -gt 0 ]; then
+    printf '%s\n' "$value"
+    return 0
+  fi
+
+  if command -v getconf >/dev/null 2>&1; then
+    value="$(getconf PAGESIZE 2>/dev/null || true)"
+    if [[ "$value" =~ ^[0-9]+$ ]] && [ "$value" -gt 0 ]; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+apkw_host_page_profile() {
+  local size="${1:-}"
+
+  if [ -z "$size" ]; then
+    size="$(apkw_detect_host_page_size || true)"
+  fi
+
+  if [[ "$size" =~ ^[0-9]+$ ]] && [ "$size" -gt 4096 ]; then
+    printf '16k\n'
+  else
+    printf '4k\n'
+  fi
+}
+
+apkw_read_os_release_value() {
+  local key="$1"
+  local line
+
+  [ -r /etc/os-release ] || return 1
+
+  while IFS= read -r line; do
+    case "$line" in
+      "${key}="*)
+        line="${line#*=}"
+        line="${line#\"}"
+        line="${line%\"}"
+        printf '%s\n' "$line"
+        return 0
+        ;;
+    esac
+  done </etc/os-release
+
+  return 1
+}
+
+apkw_export_host_profile() {
+  local page_size
+  local page_profile
+  local page_source="${APKW_HOST_PAGE_SIZE_SOURCE:-}"
+  local os_id
+  local os_version_id
+  local os_pretty_name
+
+  if [[ "${APKW_HOST_PAGE_SIZE:-}" =~ ^[0-9]+$ ]] && [ "${APKW_HOST_PAGE_SIZE}" -gt 0 ]; then
+    page_size="${APKW_HOST_PAGE_SIZE}"
+    if [ -z "$page_source" ]; then
+      page_source="env-override"
+    fi
+  else
+    page_size="$(getconf PAGESIZE 2>/dev/null || true)"
+    if [[ "$page_size" =~ ^[0-9]+$ ]] && [ "$page_size" -gt 0 ]; then
+      page_source="getconf"
+    else
+      page_size=""
+      page_source=""
+    fi
+  fi
+
+  if [ -n "$page_size" ]; then
+    export APKW_HOST_PAGE_SIZE="$page_size"
+  fi
+  if [ -n "$page_source" ]; then
+    export APKW_HOST_PAGE_SIZE_SOURCE="$page_source"
+  fi
+
+  page_profile="$(apkw_host_page_profile "$page_size")"
+  export APKW_HOST_PAGE_PROFILE="$page_profile"
+
+  os_id="$(apkw_read_os_release_value ID || true)"
+  os_version_id="$(apkw_read_os_release_value VERSION_ID || true)"
+  os_pretty_name="$(apkw_read_os_release_value PRETTY_NAME || true)"
+
+  [ -n "$os_id" ] && export APKW_HOST_OS_ID="$os_id"
+  [ -n "$os_version_id" ] && export APKW_HOST_OS_VERSION_ID="$os_version_id"
+  [ -n "$os_pretty_name" ] && export APKW_HOST_OS_PRETTY_NAME="$os_pretty_name"
+}
+
 apkw_pick_latest_aapt2() {
   local sdk_root="$1"
   local dir
@@ -230,10 +312,11 @@ apkw_prepare_launch_env() {
   local sdk_path
   local supported_java
 
+  apkw_export_host_profile
+
   if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
     for base in \
       "$HOME/.local/share/apkw/toolchains/android-sdk-custom" \
-      "$HOME/.local/share/aadk/toolchains/android-sdk-custom" \
       "$HOME/Android/Sdk" \
       "$HOME/Android/sdk"; do
       if sdk_path=$(apkw_pick_latest_valid_sdk "$base"); then
@@ -247,7 +330,6 @@ apkw_prepare_launch_env() {
   if [ -z "${ANDROID_NDK_ROOT:-}" ]; then
     for base in \
       "$HOME/.local/share/apkw/toolchains/android-ndk-custom" \
-      "$HOME/.local/share/aadk/toolchains/android-ndk-custom" \
       "${ANDROID_SDK_ROOT:-}/ndk" \
       "${ANDROID_SDK_ROOT:-}/ndk-bundle"; do
       if ndk_path=$(apkw_pick_latest_valid_ndk "$base"); then
@@ -312,6 +394,11 @@ apkw_print_launch_env_summary() {
   local example_jdk
 
   echo "Environment:"
+  echo "  APKW_HOST_PAGE_SIZE=${APKW_HOST_PAGE_SIZE:-<unset>}"
+  echo "  APKW_HOST_PAGE_SIZE_SOURCE=${APKW_HOST_PAGE_SIZE_SOURCE:-<unset>}"
+  echo "  APKW_HOST_PAGE_PROFILE=${APKW_HOST_PAGE_PROFILE:-<unset>}"
+  echo "  APKW_HOST_OS_ID=${APKW_HOST_OS_ID:-<unset>}"
+  echo "  APKW_HOST_OS_VERSION_ID=${APKW_HOST_OS_VERSION_ID:-<unset>}"
   echo "  ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-<unset>}"
   echo "  ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT:-<unset>}"
   echo "  JAVA_HOME=${JAVA_HOME:-<unset>}"

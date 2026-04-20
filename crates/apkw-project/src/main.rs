@@ -30,7 +30,6 @@ use uuid::Uuid;
 
 const STATE_FILE_NAME: &str = "projects.json";
 const PROJECT_DIR_NAME: &str = ".apkw";
-const LEGACY_PROJECT_DIR_NAME: &str = ".aadk";
 const PROJECT_META_NAME: &str = "project.json";
 const TEMPLATE_ENV: &str = "APKW_PROJECT_TEMPLATES";
 const MAX_RECENTS: usize = 50;
@@ -172,12 +171,6 @@ fn state_file_path() -> PathBuf {
 
 fn metadata_file_path(project_dir: &Path) -> PathBuf {
     project_dir.join(PROJECT_DIR_NAME).join(PROJECT_META_NAME)
-}
-
-fn legacy_metadata_file_path(project_dir: &Path) -> PathBuf {
-    project_dir
-        .join(LEGACY_PROJECT_DIR_NAME)
-        .join(PROJECT_META_NAME)
 }
 
 fn toolchain_state_path() -> PathBuf {
@@ -967,21 +960,16 @@ fn validate_target_path(path: &Path) -> Result<(), Status> {
 }
 
 fn read_project_metadata(project_dir: &Path) -> io::Result<Option<ProjectMetadata>> {
-    for path in [
-        metadata_file_path(project_dir),
-        legacy_metadata_file_path(project_dir),
-    ] {
-        match fs::read_to_string(&path) {
-            Ok(data) => {
-                let meta: ProjectMetadata = serde_json::from_str(&data)
-                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-                return Ok(Some(meta));
-            }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
-            Err(err) => return Err(err),
+    let path = metadata_file_path(project_dir);
+    match fs::read_to_string(&path) {
+        Ok(data) => {
+            let meta: ProjectMetadata = serde_json::from_str(&data)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+            Ok(Some(meta))
         }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err),
     }
-    Ok(None)
 }
 
 fn write_project_metadata(project_dir: &Path, meta: &ProjectMetadata) -> io::Result<()> {

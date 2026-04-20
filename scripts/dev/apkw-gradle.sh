@@ -64,6 +64,11 @@ elif [ -n "${ANDROID_SDK_ROOT:-}" ]; then
 fi
 
 if [ "$PRINT_ENV" -eq 1 ]; then
+  echo "APKW_HOST_PAGE_SIZE=${APKW_HOST_PAGE_SIZE:-}"
+  echo "APKW_HOST_PAGE_SIZE_SOURCE=${APKW_HOST_PAGE_SIZE_SOURCE:-}"
+  echo "APKW_HOST_PAGE_PROFILE=${APKW_HOST_PAGE_PROFILE:-}"
+  echo "APKW_HOST_OS_ID=${APKW_HOST_OS_ID:-}"
+  echo "APKW_HOST_OS_VERSION_ID=${APKW_HOST_OS_VERSION_ID:-}"
   echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
   echo "ANDROID_HOME=${ANDROID_HOME:-}"
   echo "ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT:-}"
@@ -95,6 +100,18 @@ else
 fi
 
 EXTRA_ARGS=("--console=plain")
+if [ -n "${APKW_HOST_PAGE_SIZE:-}" ]; then
+  EXTRA_ARGS+=("-Papkw.hostPageSize=${APKW_HOST_PAGE_SIZE}")
+fi
+if [ -n "${APKW_HOST_PAGE_PROFILE:-}" ]; then
+  EXTRA_ARGS+=("-Papkw.hostPageProfile=${APKW_HOST_PAGE_PROFILE}")
+fi
+if [ -n "${APKW_HOST_OS_ID:-}" ]; then
+  EXTRA_ARGS+=("-Papkw.hostOsId=${APKW_HOST_OS_ID}")
+fi
+if [ -n "${APKW_HOST_OS_VERSION_ID:-}" ]; then
+  EXTRA_ARGS+=("-Papkw.hostOsVersionId=${APKW_HOST_OS_VERSION_ID}")
+fi
 if [ -n "$AAPT2_BIN" ]; then
   EXTRA_ARGS+=("-Pandroid.aapt2FromMavenOverride=$AAPT2_BIN")
 fi
@@ -102,6 +119,8 @@ fi
 echo "APK Workbench Gradle wrapper"
 echo "  project: $PROJECT_DIR"
 echo "  gradle:  $GRADLE_BIN"
+echo "  host:    ${APKW_HOST_OS_ID:-unknown} ${APKW_HOST_OS_VERSION_ID:-} (${APKW_HOST_PAGE_PROFILE:-unknown}, ${APKW_HOST_PAGE_SIZE:-?} bytes)"
+echo "  hostsrc: ${APKW_HOST_PAGE_SIZE_SOURCE:-unknown}"
 echo "  sdk:     ${ANDROID_SDK_ROOT:-<unset>}"
 echo "  ndk:     ${ANDROID_NDK_ROOT:-<unset>}"
 echo "  java:    ${JAVA_HOME:-<unset>}"

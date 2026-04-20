@@ -9,7 +9,7 @@
         { "key": "minSdk", "value": "24" },
         { "key": "compileSdk", "value": "35" }
       ],
-      "exclude_dirs": [".gradle", "build", ".idea", ".git", "target", "out", ".apkw", ".aadk"],
+      "exclude_dirs": [".gradle", "build", ".idea", ".git", "target", "out", ".apkw"],
       "exclude_files": ["local.properties", ".DS_Store"]
     },
     {
@@ -21,7 +21,7 @@
         { "key": "minSdk", "value": "24" },
         { "key": "compileSdk", "value": "35" }
       ],
-      "exclude_dirs": [".gradle", "build", ".idea", ".git", "target", "out", ".apkw", ".aadk"],
+      "exclude_dirs": [".gradle", "build", ".idea", ".git", "target", "out", ".apkw"],
       "exclude_files": ["local.properties", ".DS_Store"]
     }
   ]

@@ -32,42 +32,18 @@ pub const DEFAULT_WORKFLOW_ADDR: &str = "127.0.0.1:50057";
 
 static TMP_FILE_SEQ: AtomicU64 = AtomicU64::new(0);
 
-fn legacy_env_key(key: &str) -> Option<String> {
-    key.strip_prefix("APKW_")
-        .map(|suffix| format!("AADK_{suffix}"))
-}
-
 pub fn env_var(key: &str) -> Option<String> {
-    std::env::var(key)
-        .ok()
-        .or_else(|| legacy_env_key(key).and_then(|legacy_key| std::env::var(legacy_key).ok()))
+    std::env::var(key).ok()
 }
 
 pub fn env_addr(key: &str, default: &str) -> String {
     env_var(key).unwrap_or_else(|| default.to_string())
 }
 
-pub fn promote_legacy_env() {
-    for (key, value) in std::env::vars_os() {
-        let Some(key) = key.to_str() else {
-            continue;
-        };
-        let Some(suffix) = key.strip_prefix("AADK_") else {
-            continue;
-        };
-        let current_key = format!("APKW_{suffix}");
-        if std::env::var_os(&current_key).is_none() {
-            std::env::set_var(current_key, value);
-        }
-    }
-}
+pub fn promote_legacy_env() {}
 
 fn preferred_data_dir_name() -> &'static str {
     "apkw"
-}
-
-fn legacy_data_dir_name() -> &'static str {
-    "aadk"
 }
 
 fn home_data_dir(name: &str) -> PathBuf {
@@ -107,13 +83,7 @@ pub fn workflow_addr() -> String {
 }
 
 pub fn data_dir() -> PathBuf {
-    let current = home_data_dir(preferred_data_dir_name());
-    let legacy = home_data_dir(legacy_data_dir_name());
-    if current.exists() || !legacy.exists() {
-        current
-    } else {
-        legacy
-    }
+    home_data_dir(preferred_data_dir_name())
 }
 
 pub fn state_dir() -> PathBuf {

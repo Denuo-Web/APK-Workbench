@@ -81,9 +81,9 @@ pub fn init(options: TelemetryOptions) -> Arc<Telemetry> {
 }
 
 pub fn init_with_env(app_name: &'static str, app_version: &'static str) -> Arc<Telemetry> {
-    let usage_enabled = env_flag_compat("APKW_TELEMETRY", "AADK_TELEMETRY");
-    let crash_enabled = env_flag_compat("APKW_TELEMETRY_CRASH", "AADK_TELEMETRY_CRASH");
-    let install_id = env_var_compat("APKW_TELEMETRY_INSTALL_ID", "AADK_TELEMETRY_INSTALL_ID");
+    let usage_enabled = env_flag("APKW_TELEMETRY");
+    let crash_enabled = env_flag("APKW_TELEMETRY_CRASH");
+    let install_id = std::env::var("APKW_TELEMETRY_INSTALL_ID").ok();
     init(TelemetryOptions {
         app_name,
         app_version,
@@ -275,20 +275,10 @@ fn write_crash_report(app_name: &str, report: &CrashReport) {
 }
 
 fn data_dir() -> PathBuf {
-    let current = if let Ok(home) = std::env::var("HOME") {
+    if let Ok(home) = std::env::var("HOME") {
         PathBuf::from(&home).join(".local/share/apkw")
     } else {
         PathBuf::from("/tmp/apkw")
-    };
-    let legacy = if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(&home).join(".local/share/aadk")
-    } else {
-        PathBuf::from("/tmp/aadk")
-    };
-    if current.exists() || !legacy.exists() {
-        current
-    } else {
-        legacy
     }
 }
 
@@ -299,24 +289,6 @@ fn env_flag(name: &str) -> bool {
             "1" | "true" | "yes" | "on"
         ),
         Err(_) => false,
-    }
-}
-
-fn env_var_compat(primary: &str, legacy: &str) -> Option<String> {
-    std::env::var(primary).ok().or_else(|| {
-        if std::env::var_os(primary).is_none() {
-            std::env::var(legacy).ok()
-        } else {
-            None
-        }
-    })
-}
-
-fn env_flag_compat(primary: &str, legacy: &str) -> bool {
-    if std::env::var_os(primary).is_some() {
-        env_flag(primary)
-    } else {
-        env_flag(primary) || env_flag(legacy)
     }
 }
 
