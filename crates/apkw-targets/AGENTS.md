@@ -26,8 +26,9 @@ Update this file whenever TargetService behavior changes or when commits touchin
   and reconciled against live discovery when possible.
 - APK install/launch/stop and logcat are implemented via adb commands.
 - Cuttlefish install uses APKW_CUTTLEFISH_INSTALL_CMD when set; otherwise Debian-like hosts use the
-  android-cuttlefish apt repo install command. Debian 13 ARM64 is the validated path for that
-  automation; other distros require a custom install command and are currently experimental.
+  android-cuttlefish apt repo install command. Debian 13 ARM64, including Raspberry Pi OS
+  64-bit, is the validated path for that automation; other distros require a custom
+  install command and are currently experimental.
   Per-request branch/target/build_id overrides are supported via ResolveCuttlefishBuild.
 - Cuttlefish operations run external commands and report state via JobService events.
 - GetCuttlefishStatus now combines `cvd status` with ADB state fallback (including `adb devices -l`
@@ -75,7 +76,8 @@ Update this file whenever TargetService behavior changes or when commits touchin
 - Host-tool readiness now requires more than a bundled `launch_cvd` binary: unless `APKW_CUTTLEFISH_START_CMD` overrides startup, the service also expects `/usr/lib/cuttlefish-common/bin/capability_query.py` (or `APKW_CUTTLEFISH_CAPABILITY_QUERY`) so removed Debian host packages are detected as incomplete instead of being treated as installed.
 - InstallCuttlefish now re-validates host readiness after the host-install phase and fails with a clear host-tools-incomplete error when the capability-query script is missing, preventing false "installed" successes.
 - InstallCuttlefish now prefers passwordless `sudo -n` for the default apt-based host install, but falls back to `pkexec` in graphical sessions so desktop users can approve package installation without restarting the whole stack as root.
-- Defaults align with aosp-android-latest-release and aosp_cf_*_only_phone-userdebug targets; 16K hosts use main-16k-with-phones with aosp_cf_arm64/aosp_cf_x86_64.
+- InstallCuttlefish/build resolution now distinguishes "build missing" from "public CI artifact viewer exposed no anonymous download URL"; when CI returns a public artifact page with `artifactUrl=""`/`authed=false`, the job logs point users at manual downloads plus `APKW_CUTTLEFISH_IMAGES_DIR[_16K]` and `APKW_CUTTLEFISH_HOST_DIR[_16K]` overrides instead of implying the branch/target does not exist.
+- Defaults align with aosp-android-latest-release and aosp_cf_*_only_phone-userdebug targets; 16K hosts use main-16k-with-phones with aosp_cf_arm64/aosp_cf_x86_64, and local bundle paths default to `~/.local/share/apkw/cuttlefish/<4k|16k>` unless explicit env overrides are set. Host page size is auto-detected from the running kernel unless `APKW_HOST_PAGE_SIZE` overrides it.
 - GPU mode can be set via APKW_CUTTLEFISH_GPU_MODE and is appended to launch arguments when starting Cuttlefish.
 - Start adds --start_webrtc based on show_full_ui or headless display detection unless already provided in APKW_CUTTLEFISH_START_ARGS.
 - Cuttlefish details and job outputs include WebRTC and environment control URLs.
@@ -106,6 +108,7 @@ Update this file whenever TargetService behavior changes or when commits touchin
 - APKW_CUTTLEFISH_WEBRTC_URL=https://localhost:8443
 - APKW_CUTTLEFISH_ENV_URL=https://localhost:1443
 - APKW_CUTTLEFISH_PAGE_SIZE_CHECK=0 to skip kernel page-size checks
+- APKW_HOST_PAGE_SIZE=4096|16384 to override detected host page size/profile
 - APKW_CUTTLEFISH_KVM_CHECK=0 to skip KVM availability/access checks
 - APKW_CUTTLEFISH_GPU_MODE=gfxstream|drm_virgl to configure GPU acceleration mode
 - APKW_CUTTLEFISH_HOME=/path (or _16K/_4K variants)

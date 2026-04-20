@@ -538,13 +538,40 @@ fn is_debian_like() -> bool {
     })
 }
 
+fn host_page_size_override() -> Option<usize> {
+    let value = read_env_trimmed("APKW_HOST_PAGE_SIZE")?;
+    value.parse::<usize>().ok().filter(|size| *size > 0)
+}
+
 pub(crate) fn host_page_size() -> Option<usize> {
+    if let Some(size) = host_page_size_override() {
+        return Some(size);
+    }
+
     let size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
     if size > 0 {
         Some(size as usize)
     } else {
         None
     }
+}
+
+fn host_page_profile(page_size: Option<usize>) -> &'static str {
+    page_size.map(page_size_label).unwrap_or("unknown")
+}
+
+fn host_page_size_source() -> &'static str {
+    match read_env_trimmed("APKW_HOST_PAGE_SIZE_SOURCE") {
+        Some(value) if value.eq_ignore_ascii_case("getconf") => "getconf",
+        Some(value) if value.eq_ignore_ascii_case("env-override") => "env-override",
+        Some(_) => "env",
+        None if host_page_size_override().is_some() => "env",
+        None => "sysconf",
+    }
+}
+
+fn host_os_field(key: &str) -> Option<String> {
+    read_os_release().get(key).cloned()
 }
 
 #[derive(Debug)]
@@ -682,27 +709,31 @@ fn cuttlefish_env_for_page_size(base: &str, page_size: Option<usize>) -> Option<
     read_env_trimmed(base)
 }
 
+fn cuttlefish_default_home_dir(page_size: Option<usize>) -> PathBuf {
+    let base = data_dir().join("cuttlefish");
+    let suffix = page_size.map(page_size_label).unwrap_or("default");
+    base.join(suffix.to_lowercase())
+}
+
 fn cuttlefish_home_dir(page_size: Option<usize>) -> PathBuf {
     if let Some(path) = cuttlefish_env_for_page_size("APKW_CUTTLEFISH_HOME", page_size) {
         return PathBuf::from(path);
     }
-    let base = data_dir().join("cuttlefish");
-    let suffix = page_size.map(page_size_label).unwrap_or("default");
-    base.join(suffix.to_lowercase())
+    cuttlefish_default_home_dir(page_size)
 }
 
 fn cuttlefish_images_dir(page_size: Option<usize>) -> PathBuf {
     if let Some(path) = cuttlefish_env_for_page_size("APKW_CUTTLEFISH_IMAGES_DIR", page_size) {
         return PathBuf::from(path);
     }
-    cuttlefish_home_dir(page_size)
+    cuttlefish_default_home_dir(page_size)
 }
 
 pub(crate) fn cuttlefish_host_dir(page_size: Option<usize>) -> PathBuf {
     if let Some(path) = cuttlefish_env_for_page_size("APKW_CUTTLEFISH_HOST_DIR", page_size) {
         return PathBuf::from(path);
     }
-    cuttlefish_home_dir(page_size)
+    cuttlefish_default_home_dir(page_size)
 }
 
 fn cuttlefish_branch(page_size: Option<usize>) -> String {
@@ -1109,37 +1140,84 @@ async fn artifact_url_is_downloadable(url: &str) -> bool {
 
 #[derive(Debug, Deserialize)]
 struct ArtifactViewerVariables {
+    artifact: Option<String>,
     #[serde(rename = "artifactUrl")]
     artifact_url: Option<String>,
+    authed: Option<bool>,
+    #[serde(rename = "forceLogin")]
+    force_login: Option<bool>,
+    target: Option<String>,
 }
 
-fn extract_artifact_url_from_viewer(html: &str) -> Option<String> {
+fn parse_artifact_viewer_variables(html: &str) -> Option<ArtifactViewerVariables> {
     let payload = extract_js_variables_payload(html)?;
-    let parsed: ArtifactViewerVariables = serde_json::from_str(&payload).ok()?;
-    parsed.artifact_url
+    serde_json::from_str(&payload).ok()
+}
+
+fn artifact_viewer_url_hint(parsed: &ArtifactViewerVariables) -> Option<String> {
+    let artifact_url = parsed.artifact_url.as_deref().unwrap_or("").trim();
+    if !artifact_url.is_empty() {
+        return None;
+    }
+
+    let artifact = parsed.artifact.as_deref().unwrap_or("requested artifact");
+    let target = parsed.target.as_deref().unwrap_or("requested target");
+    if parsed.authed == Some(false) {
+        return Some(format!(
+            "artifact viewer page for {artifact} on target {target} is public but does not expose a downloadable URL to anonymous requests (authed=false); download the images/host package manually and set APKW_CUTTLEFISH_IMAGES_DIR_16K/APKW_CUTTLEFISH_HOST_DIR_16K or the generic APKW_CUTTLEFISH_IMAGES_DIR/APKW_CUTTLEFISH_HOST_DIR overrides"
+        ));
+    }
+    if parsed.force_login == Some(true) {
+        return Some(format!(
+            "artifact viewer requires login before exposing a downloadable URL for {artifact} on target {target}; download the images/host package manually and set APKW_CUTTLEFISH_IMAGES_DIR_16K/APKW_CUTTLEFISH_HOST_DIR_16K or the generic APKW_CUTTLEFISH_IMAGES_DIR/APKW_CUTTLEFISH_HOST_DIR overrides"
+        ));
+    }
+    Some(format!(
+        "artifact viewer returned no downloadable URL for {artifact} on target {target}"
+    ))
 }
 
 async fn resolve_artifact_url_via_viewer(
     build_id: &str,
     target: &str,
     artifact: &str,
-) -> Option<String> {
+) -> Result<Option<String>, String> {
     let url =
         format!("https://ci.android.com/builds/submitted/{build_id}/{target}/latest/{artifact}");
     let cmd = format!("curl -fsSL {}", shell_escape(&url));
-    let (ok, _, stdout, _) = run_shell_command_raw(&cmd).await.ok()?;
+    let (ok, _, stdout, stderr) = run_shell_command_raw(&cmd)
+        .await
+        .map_err(|err| err.to_string())?;
     if !ok {
-        return None;
+        let detail = stderr.trim();
+        if detail.is_empty() {
+            return Ok(None);
+        }
+        return Err(format!(
+            "failed to query artifact viewer for build_id={build_id}, target={target}, artifact={artifact}: {detail}"
+        ));
     }
-    let artifact_url = extract_artifact_url_from_viewer(&stdout)?;
+    let parsed = match parse_artifact_viewer_variables(&stdout) {
+        Some(parsed) => parsed,
+        None => return Ok(None),
+    };
+    if let Some(hint) = artifact_viewer_url_hint(&parsed) {
+        return Err(hint);
+    }
+    let artifact_url = match parsed.artifact_url.as_deref() {
+        Some(url) => url.trim(),
+        None => "",
+    };
     let trimmed = artifact_url.trim();
     if trimmed.is_empty() {
-        return None;
+        return Ok(None);
     }
     if artifact_url_is_downloadable(trimmed).await {
-        return Some(trimmed.to_string());
+        return Ok(Some(trimmed.to_string()));
     }
-    None
+    Err(format!(
+        "artifact viewer returned a non-downloadable URL for build_id={build_id}, target={target}, artifact={artifact}"
+    ))
 }
 
 async fn resolve_artifact_url(
@@ -1158,6 +1236,8 @@ async fn resolve_artifact_url(
         format!("https://ci.android.com/builds/submitted/{build_id}/{target}/latest/"),
     ];
 
+    let mut viewer_hint = None;
+
     for artifact in artifacts {
         for base in &bases {
             let url = format!("{base}{artifact}");
@@ -1165,9 +1245,15 @@ async fn resolve_artifact_url(
                 return Ok(url);
             }
         }
-        if let Some(url) = resolve_artifact_url_via_viewer(build_id, target, artifact).await {
-            return Ok(url);
+        match resolve_artifact_url_via_viewer(build_id, target, artifact).await {
+            Ok(Some(url)) => return Ok(url),
+            Ok(None) => {}
+            Err(err) => viewer_hint = Some(err),
         }
+    }
+
+    if let Some(hint) = viewer_hint {
+        return Err(hint);
     }
 
     Err(format!(
@@ -1503,6 +1589,32 @@ pub(crate) async fn maybe_cuttlefish_target(
         details.push(KeyValue {
             key: "host_page_size".into(),
             value: size.to_string(),
+        });
+    }
+    details.push(KeyValue {
+        key: "host_page_profile".into(),
+        value: host_page_profile(page_size).into(),
+    });
+    details.push(KeyValue {
+        key: "host_page_size_source".into(),
+        value: host_page_size_source().into(),
+    });
+    if let Some(pretty_name) = host_os_field("PRETTY_NAME") {
+        details.push(KeyValue {
+            key: "host_os".into(),
+            value: pretty_name,
+        });
+    }
+    if let Some(id) = host_os_field("ID") {
+        details.push(KeyValue {
+            key: "host_os_id".into(),
+            value: id,
+        });
+    }
+    if let Some(version_id) = host_os_field("VERSION_ID") {
+        details.push(KeyValue {
+            key: "host_os_version_id".into(),
+            value: version_id,
         });
     }
     let kvm = kvm_status();
@@ -1894,7 +2006,17 @@ async fn collect_cuttlefish_diagnostics() -> String {
     let mut out = String::new();
     let page_size = host_page_size();
     if let Some(size) = page_size {
-        out.push_str(&format!("host page size: {size}\n"));
+        out.push_str(&format!(
+            "host page size: {size} ({})\n",
+            host_page_profile(page_size)
+        ));
+    }
+    out.push_str(&format!(
+        "host page size source: {}\n",
+        host_page_size_source()
+    ));
+    if let Some(pretty_name) = host_os_field("PRETTY_NAME") {
+        out.push_str(&format!("host os: {pretty_name}\n"));
     }
     out.push_str(&format!(
         "cuttlefish_home: {}\n",
@@ -2134,7 +2256,16 @@ async fn cuttlefish_preflight(
     }
 
     if let Some(size) = page_size {
-        let _ = publish_log(job_client, job_id, &format!("Host page size: {size}\n")).await;
+        let _ = publish_log(
+            job_client,
+            job_id,
+            &format!(
+                "Host page size: {size} ({}, source={})\n",
+                host_page_profile(page_size),
+                host_page_size_source()
+            ),
+        )
+        .await;
         if require_images && size > 4096 {
             if cuttlefish_page_size_check_enabled() {
                 if !images_ready {
@@ -3077,6 +3208,8 @@ pub(crate) async fn run_cuttlefish_install_job(job_id: String, options: Cuttlefi
     let kvm_status = kvm_status();
     let mut environment_metrics = vec![
         metric("page_size", page_size.unwrap_or_default()),
+        metric("page_profile", host_page_profile(page_size)),
+        metric("page_size_source", host_page_size_source()),
         metric("home_dir", home_dir.display()),
         metric("images_dir", images_dir.display()),
         metric("host_dir", host_dir.display()),
@@ -3539,7 +3672,7 @@ pub(crate) async fn run_cuttlefish_install_job(job_id: String, options: Cuttlefi
                         &mut job_client,
                         &job_id,
                         &format!(
-                            "Cuttlefish build not available for branch={candidate_branch} target={candidate_target}: {err}\n"
+                            "Cuttlefish build resolution failed for branch={candidate_branch} target={candidate_target}: {err}\n"
                         ),
                     )
                     .await;
@@ -3935,6 +4068,36 @@ mod tests {
     #[test]
     fn host_tools_allow_custom_start_command_without_capability_query() {
         assert!(cuttlefish_host_tools_issue_for_detection(true, false, false, false).is_none());
+    }
+
+    #[test]
+    fn artifact_viewer_hint_reports_anonymous_access_limit() {
+        let html = r#"
+<!DOCTYPE html>
+<html>
+<script>
+  var JSVariables = {"artifact":"aosp_cf_arm64-img-11276255.zip","artifactUrl":"","authed":false,"forceLogin":false,"target":"aosp_cf_arm64"};
+</script>
+</html>
+"#;
+        let parsed = parse_artifact_viewer_variables(html).expect("parse viewer vars");
+        let hint = artifact_viewer_url_hint(&parsed).expect("expected viewer hint");
+        assert!(hint.contains("authed=false"));
+        assert!(hint.contains("APKW_CUTTLEFISH_IMAGES_DIR_16K"));
+    }
+
+    #[test]
+    fn artifact_viewer_hint_ignores_present_download_url() {
+        let html = r#"
+<!DOCTYPE html>
+<html>
+<script>
+  var JSVariables = {"artifact":"cvd-host_package.tar.gz","artifactUrl":"https://example.invalid/cvd-host_package.tar.gz","authed":true,"forceLogin":false,"target":"aosp_cf_arm64"};
+</script>
+</html>
+"#;
+        let parsed = parse_artifact_viewer_variables(html).expect("parse viewer vars");
+        assert!(artifact_viewer_url_hint(&parsed).is_none());
     }
 
     #[test]
