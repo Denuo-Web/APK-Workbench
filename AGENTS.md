@@ -5,12 +5,12 @@ This repository is a GUI-first, multi-service gRPC platform for Android developm
 It is intentionally minimal but complete enough to extend. The GTK4 UI and CLI are thin clients;
 the service crates contain the real workflows. The project is designed around a JobService that
 streams events to clients while long-running jobs execute in other services.
-- Canonical upstream repository: `https://github.com/Denuo-Web/APK-Workshop`
+- Canonical upstream repository: `https://github.com/Denuo-Web/APK-Workbench`
 
 ## Supported host
 - Linux ARM64 (aarch64) is the only supported host for running the full stack (services/UI/Cuttlefish).
 - Debian 13 on Linux ARM64 is the primary validated distro for full-stack support, release smoke
-  tests, and default Cuttlefish host-tool automation.
+  tests, and default Cuttlefish host-tool automation; Raspberry Pi OS 64-bit is included.
 - Non-Debian Linux ARM64 hosts are experimental for the full stack and generally require explicit
   overrides such as APKW_CUTTLEFISH_INSTALL_CMD.
 - x86_64 is intentionally out of scope because Android Studio already covers it.
@@ -50,15 +50,13 @@ completed items or move them into the implementation notes.
 - scripts/dev/run-all.sh: local dev runner for all services (uses the shared launcher env helper to auto-export ANDROID_SDK_ROOT/ANDROID_HOME and APKW_ADB_PATH when an SDK is detected)
 - scripts/dev/apkw-gradle.sh: wrapper for building external Android projects with APKW-managed ARM64 SDK/NDK + `aapt2` override; prefer this over plain `./gradlew` when working outside this repo, and note that it prefers APKW-managed toolchains over inherited shell SDK env unless `APKW_GRADLE_RESPECT_EXISTING_ENV=1`
 - scripts/release/common.sh: shared release metadata/helpers (workspace version, supported-host guards, binary list)
-- scripts/release/apkw-env.sh: shared Android/Java environment detection for the dev runner and installed launcher; it also recognizes legacy `~/.local/share/aadk/toolchains` installs while the host transitions to `apkw`
+- scripts/release/apkw-env.sh: shared Android/Java environment detection for the dev runner and installed launcher; it exports host OS + 4K/16K page-size profile and allows explicit override via `APKW_HOST_PAGE_SIZE`
 - scripts/release/build.sh: release build + GitHub Releases tarball packaging helper
 - scripts/release/build-deb.sh: Debian (.deb) convenience package builder (templates package metadata/docs and installs the launcher helper)
 - scripts/release/apkw-start.sh: installed launcher (services + UI, logs to ~/.local/share/apkw/logs)
 - packaging/deb/*: Debian packaging metadata (control, desktop entry, postinst/postrm, manpages)
-- LICENSES/third_party/webkit + THIRD_PARTY_NOTICES: staged WebKit/MiniBrowser license texts, provenance, and notices for bundled WebKit runtime artifacts
 - assets/apkw.svg: GTK app icon used by the Debian package
 - docs/release.md: release build steps
-- dist/webkit-builds/<build-id>: staged WebKitGTK MiniBrowser runtime bundles, checksums, manifests, and matching source artifacts when packaging a pinned embedded browser runtime
 - SampleConsole: Minimal Compose sample app (Sample Console) bundled with APKW
 - CS492_Assignment1_RosenauJ/CS492A1RosenauJ: Course assignment sample app
 
@@ -75,6 +73,7 @@ Default addresses (override with env vars):
 ## Cross-service flows
 - UI/CLI call gRPC services; they do not implement business logic.
 - For Android app repos outside APKW itself, agents should first try `scripts/dev/apkw-gradle.sh --project-dir <repo> <task>` so builds inherit the ARM64 SDK/NDK and avoid x86 `aapt2` fallbacks.
+- Host page-size profile should be treated as auto-detected but overrideable: use the live kernel page size by default, and honor `APKW_HOST_PAGE_SIZE=4096|16384` when a user needs to force 4K vs 16K behavior.
 - JobService is the event bus. Toolchain/Build/Targets publish job events; UI streams events.
 - Progress payloads include job-specific metrics for build/project/toolchain/target/observe workflows.
 - BuildService resolves project paths via ProjectService GetProject for ids; direct paths are accepted.
@@ -100,6 +99,12 @@ Default addresses (override with env vars):
 - TargetService default Debian host installs prefer passwordless `sudo -n`, but can fall back to
   `pkexec` in graphical sessions so package reinstalls still work when the local host bundle exists
   but the system Cuttlefish helpers were removed.
+- TargetService Cuttlefish install/build resolution now distinguishes missing builds from public CI
+  artifact pages that expose no anonymous download URL; in that case install logs point users to
+  manual artifact downloads plus `APKW_CUTTLEFISH_IMAGES_DIR[_16K]` and
+  `APKW_CUTTLEFISH_HOST_DIR[_16K]` overrides instead of claiming the branch/target is missing.
+- TargetService local image/host bundle paths default to `~/.local/share/apkw/cuttlefish/<4k|16k>`
+  unless `APKW_CUTTLEFISH_IMAGES_DIR[_16K]` or `APKW_CUTTLEFISH_HOST_DIR[_16K]` explicitly override them.
 - ToolchainService downloads SDK/NDK archives, verifies sha256, persists state under ~/.local/share/apkw.
 - ToolchainService normalizes SDK cmdline-tools layout by creating cmdline-tools/latest links when
   archives ship a flat cmdline-tools/bin + lib layout.
@@ -119,11 +124,13 @@ Default addresses (override with env vars):
 - WorkflowService orchestrates workflow.pipeline runs and upserts run records to ObserveService.
 - UI/CLI can export/import local state archives and invoke ReloadState RPCs to rehydrate service state after import.
 - Shared JSON state writes now use unique synced temp files before rename, and state-archive opens stage extracted contents under `state-ops` on the target filesystem while rejecting archives with no restorable APKW entries.
-- UI header New project runs reset-all-state then opens the project folder picker; Open project uses the picker and auto-opens existing projects.
+- UI header New project runs reset-all-state then opens the project folder picker; Open project uses the picker, auto-opens existing projects, and preloads the selected project id/path into the shared Job Control, Workflow, Projects, and Build fields.
 - UI state snapshots now autosave while the app is open, and the header Save state action flushes a fresh UI snapshot before creating the zip archive.
 - UI shell now applies a shared GTK CSS layer for the left rail, intro cards, section frames, and
   per-tab output panels; every tab output log includes Copy/Clear controls and primary/destructive
   actions are emphasized consistently on major workflows.
+- UI shell CSS now works with a dedicated background layer and theme-derived opaque shell colors so the desktop does not bleed through behind the GTK app when compositor or theme defaults leave top-level surfaces translucent.
+- UI left rail is now extremely compact at half the prior narrowed width: the brand copy remains at the top-left, project actions stack vertically to its right, workspace export/import actions sit side by side in their own Workspace card, Help opens a standard GTK about/help dialog, and the Active context card scrolls horizontally for long values.
 
 ## Shared data and locations
 - Job state: ~/.local/share/apkw/state/jobs.json

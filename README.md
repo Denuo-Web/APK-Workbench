@@ -6,13 +6,13 @@ GUI-first, multi-service gRPC platform for Android development workflows. The GT
 are thin clients; all real work lives in the service crates. JobService is the event bus that
 streams job state/progress/logs to clients.
 
-- Source repository: `https://github.com/Denuo-Web/APK-Workshop`
-- Releases: `https://github.com/Denuo-Web/APK-Workshop/releases`
+- Source repository: `https://github.com/Denuo-Web/APK-Workbench`
+- Releases: `https://github.com/Denuo-Web/APK-Workbench/releases`
 
 ## Supported host
 - Linux ARM64 (aarch64) is the only supported host for running the full stack (services/UI/Cuttlefish).
 - Debian 13 on Linux ARM64 is the primary validated distro for full-stack support, release smoke tests,
-  and Cuttlefish host-tool automation.
+  and Cuttlefish host-tool automation. Raspberry Pi OS 64-bit is included in that path.
 - Non-Debian Linux ARM64 hosts are experimental for the full stack and generally require explicit
   overrides such as `APKW_CUTTLEFISH_INSTALL_CMD`.
 - x86_64 is intentionally out of scope because Android Studio already covers it.
@@ -174,10 +174,11 @@ cargo run -p apkw-cli -- project use-active-defaults <project_id>
 When you are working in a separate Android app repo on this ARM64 host, use the APK Workbench
 wrapper instead of calling `./gradlew` directly. It auto-detects the local ARM64 SDK/NDK, chooses
 the installed `aapt2`, and fills in the Gradle property override that otherwise tends to fall back
-to incompatible x86 tooling. It also understands both the current `~/.local/share/apkw/toolchains`
-layout and the legacy `~/.local/share/aadk/toolchains` layout. By default it prefers APK
-Workbench-managed toolchains even if your shell already exports `ANDROID_SDK_ROOT`; set
+to incompatible x86 tooling. By default it prefers APK Workbench-managed toolchains even if your
+shell already exports `ANDROID_SDK_ROOT`; set
 `APKW_GRADLE_RESPECT_EXISTING_ENV=1` if you explicitly want to keep the current shell SDK/NDK env.
+The wrapper also passes `apkw.hostPageSize`, `apkw.hostPageProfile`, `apkw.hostOsId`, and
+`apkw.hostOsVersionId` into Gradle so external projects can adapt their own build logic.
 
 ```bash
 /home/den/Documents/APK_Workbench/scripts/dev/apkw-gradle.sh \
@@ -212,7 +213,7 @@ sha256sum "apkw-${VERSION}-linux-aarch64.tar.gz" > "apkw-${VERSION}-linux-aarch6
 ```
 
 Upload `apkw-${VERSION}-linux-aarch64.tar.gz` and its `.sha256` file to a GitHub Release in
-`Denuo-Web/APK-Workshop`.
+`Denuo-Web/APK-Workbench`.
 GitHub Packages is not used for native APKW desktop binaries.
 
 Optional Debian convenience package:
@@ -328,12 +329,17 @@ Prerequisites (per Android Cuttlefish docs):
 - KVM virtualization is required. Check `/dev/kvm` (or `find /dev -name kvm` on ARM64); enable nested virtualization on cloud hosts.
 - Ensure the user is in `kvm`, `cvdnetwork`, and `render` groups; re-login or reboot after group changes.
 - Host tools and images should come from the same build id (Install Cuttlefish enforces this).
-- Debian 13 is the validated host path for the default android-cuttlefish apt install; other
-  distros require `APKW_CUTTLEFISH_INSTALL_CMD` and are currently experimental.
+- Debian 13 ARM64, including Raspberry Pi OS 64-bit, is the validated host path for the
+  default android-cuttlefish apt install; other distros require `APKW_CUTTLEFISH_INSTALL_CMD`
+  and are currently experimental.
 
 Defaults (when not overridden):
 - Branch: `aosp-android-latest-release` for 4K hosts; `main-16k-with-phones` for 16K.
 - Targets: `aosp_cf_arm64_only_phone-userdebug` (ARM64), `aosp_cf_x86_64_only_phone-userdebug` (x86_64), or `aosp_cf_riscv64_phone-userdebug` (riscv64). 16K defaults to `aosp_cf_arm64` / `aosp_cf_x86_64`.
+
+Host page-size adaptation:
+- APK Workbench auto-detects the running host page size and switches between 4K and 16K defaults automatically.
+- Set `APKW_HOST_PAGE_SIZE=4096` or `APKW_HOST_PAGE_SIZE=16384` to override detection explicitly when you need to force one profile.
 
 GPU acceleration:
 - Android 11+ guests use accelerated graphics when the host supports it; otherwise SwiftShader is used.
@@ -388,6 +394,7 @@ Configuration (env vars):
 - `APKW_CUTTLEFISH_WEBRTC_URL=https://localhost:8443` to override the WebRTC viewer URL
 - `APKW_CUTTLEFISH_ENV_URL=https://localhost:1443` to override the environment control endpoint
 - `APKW_CUTTLEFISH_PAGE_SIZE_CHECK=0` to skip the kernel page-size preflight check
+- `APKW_HOST_PAGE_SIZE=4096|16384` to override the detected host page-size profile
 - `APKW_CUTTLEFISH_KVM_CHECK=0` to skip the KVM availability/access check
 - `APKW_CUTTLEFISH_GPU_MODE=gfxstream|drm_virgl` to set the GPU acceleration mode
 - `APKW_CUTTLEFISH_HOME=/path` (or `_16K`/`_4K`) to set the base Cuttlefish home directory

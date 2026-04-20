@@ -6,11 +6,16 @@ The format is based on Keep a Changelog and the project versioning follows Seman
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-04-19
+
 ### Changed
-- Repository metadata, release docs, and README links now point at `github.com/Denuo-Web/APK-Workshop` after the GitHub owner/repository move.
+- Repository metadata, release docs, and README links now point at `github.com/Denuo-Web/APK-Workbench` after the GitHub owner/repository move.
 - Added an external-project Gradle wrapper at `scripts/dev/apkw-gradle.sh` and documented it as the preferred way to build sibling Android repos with APK Workbench-managed ARM64 SDK/NDK plus the correct `aapt2` override.
-- APK Workbench Android environment detection now checks both `~/.local/share/apkw/toolchains` and legacy `~/.local/share/aadk/toolchains` so existing ARM64 toolchain installs are reused automatically.
+- APK Workbench Android environment detection now uses the current `~/.local/share/apkw/toolchains` layout consistently across the launcher and external-project Gradle wrapper.
 - The external-project Gradle wrapper now prefers APK Workbench-managed toolchains over inherited shell `ANDROID_*` variables by default so stale system SDK exports do not silently push builds back onto x86-era tooling.
+- Host-profile detection is now explicit across shell wrappers and TargetService: APKW exports/uses host OS metadata plus a detected 4K vs 16K page-size profile, honors `APKW_HOST_PAGE_SIZE` as an override, and passes the host profile into Gradle builds for external Android repos.
+- Host-support docs now treat Debian 13 ARM64, including Raspberry Pi OS 64-bit, as the primary validated path.
+- Local data/config, telemetry, and Cuttlefish bundle handling now consistently use `apkw` paths and metadata names without the previous transitional aliases.
 
 ## [0.2.0] - 2026-04-06
 
@@ -18,10 +23,10 @@ The format is based on Keep a Changelog and the project versioning follows Seman
 - Embedded Cuttlefish WebRTC viewing inside the GTK Targets page using WebKitGTK, including in-app reload support, visible current URL state, and fallback browser handoff.
 - Upstream GitHub release discovery for the custom SDK and NDK providers, including merged availability results, lag checks against the pinned catalog, and support for installing or verifying upstream-only releases when URL and sha256 metadata are available.
 - Debian manpages for `apkw`, `apkw-ui`, and `apkw-cli`.
-- Compatibility bridges for legacy `AADK_*` env vars and `.aadk/project.json` metadata so existing setups keep working during the move to `APKW`.
+- Transitional compatibility bridges for older env vars and project metadata names while the APKW naming migration landed.
 
 ### Changed
-- Renamed the product from `AADK Full` to `APK Workbench` and moved the workspace package, crate, command, proto, packaging, and documentation surface from `aadk*` to `apkw*`.
+- Renamed the product to `APK Workbench` and moved the workspace package, crate, command, proto, packaging, and documentation surface to `apkw*`.
 - Commands and package entry points now ship as `apkw`, `apkw-ui`, and `apkw-cli`.
 - State, project metadata, and install layouts now prefer `~/.local/share/apkw`, `.apkw/project.json`, `/usr/lib/apkw`, and `apkw-*` release artifacts.
 - Release packaging now shares version and binary metadata from workspace-level helpers, with common logic centralized in `scripts/release/common.sh`.
