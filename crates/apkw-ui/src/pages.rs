@@ -86,6 +86,13 @@ impl HomePage {
         self.page.append(s);
     }
 
+    pub(crate) fn set_active_context(&self, ctx: &ActiveContext) {
+        self.project_id_entry.set_text(ctx.project_id.trim());
+        self.target_id_entry.set_text(ctx.target_id.trim());
+        self.toolchain_id_entry
+            .set_text(ctx.toolchain_set_id.trim());
+    }
+
     pub(crate) fn set_job_id(&self, job_id: Option<&str>) {
         let label = job_id.unwrap_or("-");
         self.job_id_label.set_text(&format!("job_id: {label}"));
@@ -520,6 +527,7 @@ impl ProjectsPage {
         } else {
             self.project_id_entry.set_text(project_id);
         }
+        self.path_entry.set_text(ctx.project_path.trim());
 
         let toolchain_set_id = ctx.toolchain_set_id.trim();
         if toolchain_set_id.is_empty() {
@@ -697,7 +705,6 @@ fn is_apkw_project_dir(path: &str) -> bool {
     }
     let root = Path::new(path);
     root.join(".apkw").join("project.json").is_file()
-        || root.join(".aadk").join("project.json").is_file()
 }
 
 fn queue_project_open(
@@ -719,7 +726,7 @@ fn queue_project_open(
     true
 }
 
-fn select_project_path(
+pub(crate) fn select_project_path(
     parent: &gtk::ApplicationWindow,
     path_entry: &gtk::Entry,
     cfg: &Arc<std::sync::Mutex<AppConfig>>,
@@ -3205,6 +3212,12 @@ pub(crate) fn page_targets(
     let default_cuttlefish_target = std::env::var("APKW_CUTTLEFISH_TARGET").unwrap_or_default();
     let default_build_id = std::env::var("APKW_CUTTLEFISH_BUILD_ID").unwrap_or_default();
     let default_webrtc_url = default_cuttlefish_webrtc_url();
+    let host_page_profile = std::env::var("APKW_HOST_PAGE_PROFILE").unwrap_or_default();
+    let cuttlefish_bundle_hint_text = if host_page_profile.eq_ignore_ascii_case("16k") {
+        "16K host note: APKW looks for local Cuttlefish bundles under ~/.local/share/apkw/cuttlefish/16k. If CI install cannot expose public artifact URLs, point APKW_CUTTLEFISH_IMAGES_DIR_16K and APKW_CUTTLEFISH_HOST_DIR_16K at your existing local bundle."
+    } else {
+        "Local bundle note: If CI install cannot expose public artifact URLs, point APKW_CUTTLEFISH_IMAGES_DIR and APKW_CUTTLEFISH_HOST_DIR at an existing local Cuttlefish bundle under ~/.local/share/apkw/cuttlefish."
+    };
 
     let cuttlefish_grid = gtk::Grid::builder()
         .row_spacing(ROW_SPACING)
@@ -3252,9 +3265,19 @@ pub(crate) fn page_targets(
     cuttlefish_grid.attach(&cuttlefish_web_url_entry, 1, 3, 1, 1);
     set_tooltip(&cuttlefish_web_url_entry, "What: Cuttlefish WebRTC URL used by the embedded pane and browser launch. Why: shows the active endpoint returned by TargetService. How: copy it for debugging or open it with the Web UI button.");
 
+    let cuttlefish_bundle_hint = gtk::Label::builder()
+        .label(cuttlefish_bundle_hint_text)
+        .wrap(true)
+        .selectable(true)
+        .xalign(0.0)
+        .build();
+    cuttlefish_bundle_hint.add_css_class("dim-label");
+    set_tooltip(&cuttlefish_bundle_hint, "What: Explain where APKW looks for local Cuttlefish bundles. Why: 16K hosts and public CI artifact pages often require a local images/host bundle. How: keep a bundle under the shown paths or set the APKW_CUTTLEFISH_IMAGES_DIR/APKW_CUTTLEFISH_HOST_DIR environment overrides.");
+
     let cuttlefish_box = gtk::Box::new(gtk::Orientation::Vertical, ROW_SPACING);
     cuttlefish_box.append(&cuttlefish_buttons);
     cuttlefish_box.append(&cuttlefish_grid);
+    cuttlefish_box.append(&cuttlefish_bundle_hint);
     let cuttlefish_frame = section_frame("Cuttlefish", &cuttlefish_box);
     sections.append(&cuttlefish_frame);
 
@@ -4733,7 +4756,7 @@ pub(crate) fn page_settings(
 
     let state_box = gtk::Box::new(gtk::Orientation::Vertical, 6);
     let state_intro = gtk::Label::builder()
-        .label("Save or open the local APKW state directory (zip). Exclusions skip large folders; state-exports and state-ops are always excluded.")
+        .label("Export or import the local APKW workspace snapshot (zip). Exclusions skip large folders; state-exports and state-ops are always excluded.")
         .xalign(0.0)
         .wrap(true)
         .build();
@@ -4743,10 +4766,10 @@ pub(crate) fn page_settings(
     let exclude_toolchains = gtk::CheckButton::with_label("Exclude toolchains");
     let exclude_bundles = gtk::CheckButton::with_label("Exclude bundles");
     let exclude_telemetry = gtk::CheckButton::with_label("Exclude telemetry");
-    set_tooltip(&exclude_downloads, "What: Skip ~/.local/share/apkw/downloads. Why: it can be large. How: enable to exclude from save/open.");
-    set_tooltip(&exclude_toolchains, "What: Skip ~/.local/share/apkw/toolchains. Why: toolchains can be large. How: enable to exclude from save/open.");
-    set_tooltip(&exclude_bundles, "What: Skip ~/.local/share/apkw/bundles. Why: bundle zips can be large. How: enable to exclude from save/open.");
-    set_tooltip(&exclude_telemetry, "What: Skip ~/.local/share/apkw/telemetry. Why: telemetry is optional and can be large. How: enable to exclude from save/open.");
+    set_tooltip(&exclude_downloads, "What: Skip ~/.local/share/apkw/downloads. Why: it can be large. How: enable to exclude from workspace export/import.");
+    set_tooltip(&exclude_toolchains, "What: Skip ~/.local/share/apkw/toolchains. Why: toolchains can be large. How: enable to exclude from workspace export/import.");
+    set_tooltip(&exclude_bundles, "What: Skip ~/.local/share/apkw/bundles. Why: bundle zips can be large. How: enable to exclude from workspace export/import.");
+    set_tooltip(&exclude_telemetry, "What: Skip ~/.local/share/apkw/telemetry. Why: telemetry is optional and can be large. How: enable to exclude from workspace export/import.");
     let exclude_box = gtk::Box::new(gtk::Orientation::Vertical, 4);
     exclude_box.append(&exclude_downloads);
     exclude_box.append(&exclude_toolchains);
@@ -4755,7 +4778,7 @@ pub(crate) fn page_settings(
     state_box.append(&exclude_box);
 
     let save_label = gtk::Label::builder()
-        .label("Save archive path")
+        .label("Export archive path")
         .xalign(0.0)
         .build();
     let save_entry = gtk::Entry::builder()
@@ -4763,14 +4786,14 @@ pub(crate) fn page_settings(
         .hexpand(true)
         .build();
     let save_browse = gtk::Button::with_label("Browse...");
-    let save_btn = gtk::Button::with_label("Save state");
+    let save_btn = gtk::Button::with_label("Export Workspace");
     style_primary_button(&save_btn);
     set_tooltip(&save_entry, "What: Output zip path. Why: choose where to store the archive. How: type a path or use Browse.");
     set_tooltip(
         &save_browse,
         "What: Pick an output zip path. Why: avoid typos. How: choose a file location.",
     );
-    set_tooltip(&save_btn, "What: Save the local state to a zip archive. Why: snapshot current APKW state. How: choose exclusions and click.");
+    set_tooltip(&save_btn, "What: Export the current APKW workspace snapshot to a zip archive. Why: back up local APKW state separately from project folders. How: choose exclusions and click.");
     let save_row = gtk::Box::new(gtk::Orientation::Horizontal, ROW_SPACING);
     save_row.append(&save_entry);
     save_row.append(&save_browse);
@@ -4779,7 +4802,7 @@ pub(crate) fn page_settings(
     state_box.append(&save_row);
 
     let open_label = gtk::Label::builder()
-        .label("Open archive path")
+        .label("Import archive path")
         .xalign(0.0)
         .build();
     let open_entry = gtk::Entry::builder()
@@ -4787,13 +4810,13 @@ pub(crate) fn page_settings(
         .hexpand(true)
         .build();
     let open_browse = gtk::Button::with_label("Browse...");
-    let open_btn = gtk::Button::with_label("Open state");
-    set_tooltip(&open_entry, "What: Zip archive path to open. Why: restore a saved state. How: type a path or use Browse.");
+    let open_btn = gtk::Button::with_label("Import Workspace");
+    set_tooltip(&open_entry, "What: Workspace archive path to import. Why: restore a saved APKW snapshot. How: type a path or use Browse.");
     set_tooltip(
         &open_browse,
-        "What: Pick a zip archive. Why: avoid typos. How: choose the archive to open.",
+        "What: Pick a workspace zip archive. Why: avoid typos. How: choose the archive to import.",
     );
-    set_tooltip(&open_btn, "What: Open an archive and reload services. Why: restore a previous APKW state. How: choose exclusions and click.");
+    set_tooltip(&open_btn, "What: Import a workspace archive and reload services. Why: restore a previous APKW snapshot separately from project folders. How: choose exclusions and click.");
     let open_row = gtk::Box::new(gtk::Orientation::Horizontal, ROW_SPACING);
     open_row.append(&open_entry);
     open_row.append(&open_browse);
@@ -4840,7 +4863,7 @@ pub(crate) fn page_settings(
             select_zip_save_dialog(
                 &parent_save,
                 &save_entry_dialog,
-                "Save APKW State Archive",
+                "Export APKW Workspace Archive",
                 Some(default_name),
                 Some(Box::new(move |path| {
                     queue_state_save_cb(path);
@@ -4862,7 +4885,7 @@ pub(crate) fn page_settings(
         select_zip_save_dialog(
             &parent_save_browse,
             &save_entry_browse,
-            "Save APKW State Archive",
+            "Export APKW Workspace Archive",
             Some(default_name),
             None,
         );
@@ -4898,7 +4921,7 @@ pub(crate) fn page_settings(
             select_zip_open_dialog(
                 &parent_open,
                 &open_entry_dialog,
-                "Open APKW State Archive",
+                "Import APKW Workspace Archive",
                 Some(Box::new(move |path| {
                     queue_state_open_cb(path);
                 })),
@@ -4914,7 +4937,7 @@ pub(crate) fn page_settings(
         select_zip_open_dialog(
             &parent_open_browse,
             &open_entry_browse,
-            "Open APKW State Archive",
+            "Import APKW Workspace Archive",
             None,
         );
     });

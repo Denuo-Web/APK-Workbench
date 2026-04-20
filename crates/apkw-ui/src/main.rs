@@ -13,7 +13,6 @@ use glib::prelude::*;
 use gtk::gdk;
 use gtk::gdk::prelude::{DisplayExt, MonitorExt};
 use gtk::gio::prelude::ListModelExt;
-use gtk::pango::EllipsizeMode;
 use gtk::prelude::*;
 use gtk4 as gtk;
 use tokio::sync::mpsc;
@@ -26,9 +25,9 @@ use config::AppConfig;
 use models::ActiveContext;
 use pages::{
     page_console, page_evidence, page_home, page_jobs_history, page_projects, page_settings,
-    page_targets, page_toolchains, page_workflow, select_zip_open_dialog, select_zip_save_dialog,
-    BuildPage, EvidencePage, HomePage, JobsHistoryPage, Page, ProjectsPage, SettingsPage,
-    TargetsPage, ToolchainsPage, WorkflowPage,
+    page_targets, page_toolchains, page_workflow, select_project_path, select_zip_open_dialog,
+    select_zip_save_dialog, BuildPage, EvidencePage, HomePage, JobsHistoryPage, Page, ProjectsPage,
+    SettingsPage, TargetsPage, ToolchainsPage, WorkflowPage,
 };
 use ui_events::{UiEventQueue, DEFAULT_EVENT_QUEUE_SIZE};
 use ui_state::UiState;
@@ -82,12 +81,24 @@ fn telemetry_env_override(name: &str) -> Option<bool> {
 }
 
 const APKW_APP_CSS: &str = r#"
-window.apkw-app {
-  background-color: @window_bg_color;
+window.apkw-app,
+overlay.apkw-shell,
+box.apkw-root,
+stack.apkw-main-stack,
+box.apkw-page-root,
+box.apkw-page-body,
+scrolledwindow.apkw-page-scroller,
+scrolledwindow.apkw-page-scroller > viewport {
+  background-color: %WINDOW_BG%;
+}
+
+box.apkw-solid-background {
+  background-color: %WINDOW_BG%;
 }
 
 .apkw-left-rail {
-  background-image: linear-gradient(180deg, shade(@window_bg_color, 1.02), shade(@window_bg_color, 0.98));
+  background-color: %WINDOW_BG%;
+  background-image: linear-gradient(180deg, shade(%WINDOW_BG%, 1.02), shade(%WINDOW_BG%, 0.98));
   border-right: 1px solid alpha(@borders, 0.72);
 }
 
@@ -115,7 +126,7 @@ label.apkw-brand-copy {
 }
 
 frame.apkw-context-card > border {
-  background-color: alpha(@card_bg_color, 0.90);
+  background-color: %CARD_BG%;
   border-color: alpha(@borders, 0.72);
 }
 
@@ -145,12 +156,12 @@ button.apkw-rail-button.suggested-action {
 
 box.apkw-page-intro {
   padding: 16px;
-  background-image: linear-gradient(180deg, alpha(@card_bg_color, 0.96), alpha(@card_bg_color, 0.80));
+  background-image: linear-gradient(180deg, shade(%CARD_BG%, 1.03), %CARD_BG%);
   border: 1px solid alpha(@borders, 0.72);
 }
 
 frame.apkw-section > border {
-  background-color: alpha(@card_bg_color, 0.88);
+  background-color: %CARD_BG%;
   border-color: alpha(@borders, 0.72);
 }
 
@@ -161,13 +172,15 @@ label.apkw-log-title {
 
 box.apkw-log-panel {
   padding: 12px;
-  background-color: alpha(@view_bg_color, 0.82);
+  background-color: %VIEW_BG%;
   border: 1px solid alpha(@borders, 0.78);
 }
 
+scrolledwindow.apkw-log-scroller,
+scrolledwindow.apkw-log-scroller > viewport,
 textview.apkw-log-view,
 textview.apkw-log-view text {
-  background-color: alpha(@view_bg_color, 0.97);
+  background-color: %VIEW_BG%;
 }
 
 button.apkw-log-action {
@@ -190,9 +203,61 @@ stacksidebar.apkw-sidebar label {
 }
 "#;
 
-fn install_app_css() {
+fn rgba_css(color: gdk::RGBA) -> String {
+    let red = (color.red() * 255.0).round().clamp(0.0, 255.0) as u8;
+    let green = (color.green() * 255.0).round().clamp(0.0, 255.0) as u8;
+    let blue = (color.blue() * 255.0).round().clamp(0.0, 255.0) as u8;
+    format!("rgba({red}, {green}, {blue}, 1.0)")
+}
+
+fn default_window_bg() -> gdk::RGBA {
+    let prefer_dark = gtk::Settings::default()
+        .map(|settings| settings.is_gtk_application_prefer_dark_theme())
+        .unwrap_or(false);
+    if prefer_dark {
+        gdk::RGBA::new(0.12, 0.12, 0.13, 1.0)
+    } else {
+        gdk::RGBA::new(0.96, 0.96, 0.97, 1.0)
+    }
+}
+
+#[allow(deprecated)]
+fn lookup_opaque_theme_color(
+    widget: &impl gtk::prelude::IsA<gtk::Widget>,
+    names: &[&str],
+    fallback: gdk::RGBA,
+) -> gdk::RGBA {
+    let style_context = widget.style_context();
+    for name in names {
+        if let Some(color) = style_context.lookup_color(name) {
+            return color.with_alpha(1.0);
+        }
+    }
+    fallback.with_alpha(1.0)
+}
+
+fn install_app_css(window: &gtk::ApplicationWindow) {
+    let window_bg = lookup_opaque_theme_color(
+        window,
+        &["window_bg_color", "view_bg_color", "theme_bg_color"],
+        default_window_bg(),
+    );
+    let card_bg = lookup_opaque_theme_color(
+        window,
+        &["card_bg_color", "window_bg_color", "view_bg_color"],
+        window_bg,
+    );
+    let view_bg = lookup_opaque_theme_color(
+        window,
+        &["view_bg_color", "card_bg_color", "window_bg_color"],
+        window_bg,
+    );
+    let css = APKW_APP_CSS
+        .replace("%WINDOW_BG%", &rgba_css(window_bg))
+        .replace("%CARD_BG%", &rgba_css(card_bg))
+        .replace("%VIEW_BG%", &rgba_css(view_bg));
     let provider = gtk::CssProvider::new();
-    provider.load_from_data(APKW_APP_CSS);
+    provider.load_from_data(&css);
     if let Some(display) = gdk::Display::default() {
         gtk::style_context_add_provider_for_display(
             &display,
@@ -200,6 +265,35 @@ fn install_app_css() {
             gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
     }
+}
+
+fn show_help_dialog(window: &gtk::ApplicationWindow) {
+    let host_os = std::env::var("APKW_HOST_OS_PRETTY_NAME")
+        .or_else(|_| std::env::var("APKW_HOST_OS_ID"))
+        .unwrap_or_else(|_| "Unknown".into());
+    let page_profile = std::env::var("APKW_HOST_PAGE_PROFILE").unwrap_or_else(|_| "unknown".into());
+    let system_information = format!(
+        "Host OS: {host_os}\nPage profile: {page_profile}\nJob service: {}",
+        std::env::var("APKW_JOB_ADDR").unwrap_or_else(|_| "127.0.0.1:50051".into())
+    );
+
+    let dialog = gtk::AboutDialog::builder()
+        .transient_for(window)
+        .modal(true)
+        .program_name("APK Workbench")
+        .version(env!("CARGO_PKG_VERSION"))
+        .comments(
+            "GTK client for APK Workbench services.\n\nUse the sidebar pages to manage jobs, workflows, toolchains, projects, builds, targets, evidence, and settings.\nUse New Project and Open Project for project folders.\nUse Export Workspace and Import Workspace for APKW snapshots.",
+        )
+        .website(env!("CARGO_PKG_HOMEPAGE"))
+        .website_label("Project homepage")
+        .copyright("APK Workbench contributors")
+        .license(env!("CARGO_PKG_LICENSE"))
+        .wrap_license(true)
+        .system_information(system_information)
+        .build();
+    dialog.set_authors(&["Denuo-Web contributors"]);
+    dialog.present();
 }
 
 #[derive(Clone)]
@@ -245,6 +339,7 @@ const LEGACY_SAMPLE_APPLICATION_ID: &str = "com.example.sampleconsole";
 fn apply_active_context(
     ctx: &ActiveContext,
     context_bar: &ContextBar,
+    home: &HomePage,
     workflow: &WorkflowPage,
     projects: &ProjectsPage,
     targets: &TargetsPage,
@@ -252,6 +347,7 @@ fn apply_active_context(
     console: &BuildPage,
 ) {
     context_bar.set_context(ctx);
+    home.set_active_context(ctx);
     workflow.set_context(ctx);
     projects.set_active_context(ctx);
     targets.set_target_id(&ctx.target_id);
@@ -824,8 +920,9 @@ fn build_ui(app: &gtk::Application) {
         .default_height(default_height)
         .resizable(true)
         .build();
-    install_app_css();
     window.add_css_class("apkw-app");
+    window.set_opacity(1.0);
+    install_app_css(&window);
 
     let cfg = Arc::new(std::sync::Mutex::new(AppConfig::load()));
     let (initial_state, has_ui_state) = UiState::load_with_status();
@@ -931,18 +1028,22 @@ fn build_ui(app: &gtk::Application) {
     // Layout: context + actions + sidebar + stack
     let root = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     root.add_css_class("apkw-root");
-    let sidebar_width = 220;
+    root.set_opacity(1.0);
+    let sidebar_width = 94;
     let left_column = gtk::Box::new(gtk::Orientation::Vertical, 6);
     left_column.add_css_class("apkw-left-rail");
     left_column.set_width_request(sidebar_width);
     left_column.set_hexpand(false);
     left_column.set_vexpand(true);
+    left_column.set_opacity(1.0);
 
     let stack = gtk::Stack::builder()
         .transition_type(gtk::StackTransitionType::SlideLeftRight)
         .hexpand(true)
         .vexpand(true)
         .build();
+    stack.add_css_class("apkw-main-stack");
+    stack.set_opacity(1.0);
     stack.set_margin_top(8);
     stack.set_margin_bottom(8);
     stack.set_margin_start(8);
@@ -963,6 +1064,8 @@ fn build_ui(app: &gtk::Application) {
         .css_classes(vec!["title-3"])
         .build();
     brand_title.add_css_class("apkw-brand-title");
+    brand_title.set_wrap(true);
+    brand_title.set_max_width_chars(10);
     let brand_copy = gtk::Label::builder()
         .label("Projects, builds, targets, and run evidence in one GTK workspace.")
         .xalign(0.0)
@@ -970,6 +1073,11 @@ fn build_ui(app: &gtk::Application) {
         .build();
     brand_copy.add_css_class("dim-label");
     brand_copy.add_css_class("apkw-brand-copy");
+    brand_copy.set_width_chars(14);
+    brand_copy.set_max_width_chars(14);
+    brand_box.set_hexpand(true);
+    brand_box.set_halign(gtk::Align::Fill);
+    brand_box.set_width_request(116);
     brand_box.append(&brand_title);
     brand_box.append(&brand_copy);
 
@@ -996,8 +1104,8 @@ fn build_ui(app: &gtk::Application) {
     let run_label = gtk::Label::builder().label("Run: -").xalign(0.0).build();
     for label in [&project_label, &toolchain_label, &target_label, &run_label] {
         label.add_css_class("apkw-context-line");
-        label.set_ellipsize(EllipsizeMode::End);
-        label.set_max_width_chars(28);
+        label.set_wrap(false);
+        label.set_selectable(true);
     }
     let context_bar = ContextBar {
         project_label: project_label.clone(),
@@ -1006,45 +1114,99 @@ fn build_ui(app: &gtk::Application) {
         run_label: run_label.clone(),
     };
 
-    let action_row = gtk::Box::new(gtk::Orientation::Vertical, 6);
-    action_row.set_margin_start(8);
-    action_row.set_margin_end(8);
-    action_row.set_margin_bottom(8);
-    let new_project_btn = gtk::Button::with_label("New project");
-    let save_state_btn = gtk::Button::with_label("Save state");
-    let open_state_btn = gtk::Button::with_label("Open state");
-    for btn in [&new_project_btn, &save_state_btn, &open_state_btn] {
+    let header_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    header_row.set_margin_end(8);
+    header_row.set_margin_bottom(4);
+    header_row.set_halign(gtk::Align::Fill);
+    header_row.set_hexpand(true);
+    let project_action_row = gtk::Box::new(gtk::Orientation::Vertical, 6);
+    project_action_row.set_margin_top(8);
+    project_action_row.set_margin_bottom(8);
+    project_action_row.set_halign(gtk::Align::End);
+    project_action_row.set_width_request(96);
+    let help_btn = gtk::Button::with_label("Help");
+    let new_project_btn = gtk::Button::with_label("New\nProject");
+    let open_project_btn = gtk::Button::with_label("Open\nProject");
+    for btn in [&new_project_btn, &open_project_btn, &help_btn] {
         btn.set_halign(gtk::Align::Fill);
         btn.set_hexpand(true);
+        btn.set_width_request(96);
         btn.add_css_class("apkw-rail-button");
     }
     new_project_btn.add_css_class("suggested-action");
     set_tooltip(
         &new_project_btn,
-        "What: Start a new project. Why: reset local state and pick a workspace. How: confirm reset, then choose a project folder.",
+        "What: Start a new project. Why: reset local UI/workspace state and pick a fresh project folder. How: confirm reset, then choose a project folder.",
     );
     set_tooltip(
-        &save_state_btn,
-        "What: Save the local state to a zip archive. Why: snapshot current APKW state. How: choose a file location (exclusions from Settings apply).",
+        &open_project_btn,
+        "What: Open an existing APKW project folder. Why: switch to an already created project without resetting workspace snapshots. How: choose a folder containing .apkw/project.json.",
     );
     set_tooltip(
-        &open_state_btn,
-        "What: Open a state archive and reload services. Why: restore a previous APKW state. How: choose a zip archive (exclusions from Settings apply).",
+        &help_btn,
+        "What: Show application help and about details. Why: review version, project links, and basic navigation guidance. How: open the standard GTK about dialog.",
     );
-    action_row.append(&new_project_btn);
-    action_row.append(&save_state_btn);
-    action_row.append(&open_state_btn);
+    project_action_row.append(&new_project_btn);
+    project_action_row.append(&open_project_btn);
+    project_action_row.append(&help_btn);
+
+    let workspace_frame = gtk::Frame::builder().label("Workspace").build();
+    workspace_frame.add_css_class("apkw-context-card");
+    workspace_frame.set_margin_top(6);
+    workspace_frame.set_margin_bottom(6);
+    workspace_frame.set_margin_start(8);
+    workspace_frame.set_margin_end(8);
+    let workspace_action_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    workspace_action_row.set_margin_top(12);
+    workspace_action_row.set_margin_bottom(12);
+    workspace_action_row.set_margin_start(12);
+    workspace_action_row.set_margin_end(12);
+    workspace_action_row.set_homogeneous(true);
+    let export_workspace_btn = gtk::Button::with_label("Export\nWorkspace");
+    let import_workspace_btn = gtk::Button::with_label("Import\nWorkspace");
+    for btn in [&export_workspace_btn, &import_workspace_btn] {
+        btn.set_halign(gtk::Align::Fill);
+        btn.set_hexpand(true);
+        btn.set_width_request(0);
+        btn.add_css_class("apkw-rail-button");
+    }
+    export_workspace_btn.add_css_class("suggested-action");
+    set_tooltip(
+        &export_workspace_btn,
+        "What: Export the current APKW workspace snapshot. Why: back up APKW state separately from project folders. How: choose a zip archive path (exclusions from Settings apply).",
+    );
+    set_tooltip(
+        &import_workspace_btn,
+        "What: Import an APKW workspace snapshot. Why: restore APKW state separately from project folders. How: choose a zip archive (exclusions from Settings apply).",
+    );
+    workspace_action_row.append(&export_workspace_btn);
+    workspace_action_row.append(&import_workspace_btn);
+    workspace_frame.set_child(Some(&workspace_action_row));
 
     context_grid.attach(&project_label, 0, 0, 1, 1);
     context_grid.attach(&toolchain_label, 0, 1, 1, 1);
     context_grid.attach(&target_label, 0, 2, 1, 1);
     context_grid.attach(&run_label, 0, 3, 1, 1);
 
-    context_frame.set_child(Some(&context_grid));
+    let context_scroller = gtk::ScrolledWindow::builder()
+        .hexpand(true)
+        .vexpand(false)
+        .hscrollbar_policy(gtk::PolicyType::Automatic)
+        .vscrollbar_policy(gtk::PolicyType::Never)
+        .build();
+    context_scroller.set_propagate_natural_width(false);
+    context_scroller.set_min_content_width(0);
+    context_scroller.set_child(Some(&context_grid));
+    context_scroller.set_has_frame(false);
 
-    left_column.append(&brand_box);
+    context_frame.set_child(Some(&context_scroller));
+
+    header_row.append(&brand_box);
+    header_row.append(&project_action_row);
+
+    left_column.append(&header_row);
     left_column.append(&context_frame);
-    left_column.append(&action_row);
+    left_column.append(&workspace_frame);
     left_column.append(&sidebar);
 
     root.append(&left_column);
@@ -1131,6 +1293,21 @@ fn build_ui(app: &gtk::Application) {
         dialog.show();
     });
 
+    let stack_for_open_project = stack.clone();
+    let window_open_project = window.clone();
+    let projects_path_entry_open = projects.path_entry.clone();
+    let cfg_open_project = cfg.clone();
+    let cmd_tx_open_project = cmd_tx.clone();
+    open_project_btn.connect_clicked(move |_| {
+        stack_for_open_project.set_visible_child_name("projects");
+        select_project_path(
+            &window_open_project,
+            &projects_path_entry_open,
+            &cfg_open_project,
+            &cmd_tx_open_project,
+        );
+    });
+
     let cfg_state_save = cfg.clone();
     let cmd_tx_state_save = cmd_tx.clone();
     let exclude_downloads_save = settings.exclude_downloads.clone();
@@ -1150,7 +1327,7 @@ fn build_ui(app: &gtk::Application) {
     let jobs_history_state_save = jobs_history.clone();
     let evidence_state_save = evidence.clone();
     let settings_state_save = settings.clone();
-    save_state_btn.connect_clicked(move |_| {
+    export_workspace_btn.connect_clicked(move |_| {
         let cfg_state_save = cfg_state_save.clone();
         let cmd_tx_state_save = cmd_tx_state_save.clone();
         let exclude_downloads_save = exclude_downloads_save.clone();
@@ -1177,7 +1354,7 @@ fn build_ui(app: &gtk::Application) {
         select_zip_save_dialog(
             &window_state_save,
             &save_entry_dialog,
-            "Save APKW State Archive",
+            "Export APKW Workspace Archive",
             Some(default_name),
             Some(Box::new(move |path| {
                 if let Err(err) = persist_ui_state_snapshot(
@@ -1218,7 +1395,7 @@ fn build_ui(app: &gtk::Application) {
     let exclude_telemetry_open = settings.exclude_telemetry.clone();
     let open_entry_state = settings.open_entry.clone();
     let window_state_open = window.clone();
-    open_state_btn.connect_clicked(move |_| {
+    import_workspace_btn.connect_clicked(move |_| {
         let cfg_state_open = cfg_state_open.clone();
         let cmd_tx_state_open = cmd_tx_state_open.clone();
         let exclude_downloads_open = exclude_downloads_open.clone();
@@ -1229,7 +1406,7 @@ fn build_ui(app: &gtk::Application) {
         select_zip_open_dialog(
             &window_state_open,
             &open_entry_dialog,
-            "Open APKW State Archive",
+            "Import APKW Workspace Archive",
             Some(Box::new(move |path| {
                 let cfg = cfg_state_open.lock().unwrap().clone();
                 cmd_tx_state_open
@@ -1246,12 +1423,18 @@ fn build_ui(app: &gtk::Application) {
         );
     });
 
+    let window_help = window.clone();
+    help_btn.connect_clicked(move |_| {
+        show_help_dialog(&window_help);
+    });
+
     {
         let cfg = cfg.lock().unwrap().clone();
         let ctx = cfg.active_context();
         apply_active_context(
             &ctx,
             &context_bar,
+            &home,
             &workflow,
             &projects,
             &targets,
@@ -1544,6 +1727,7 @@ fn build_ui(app: &gtk::Application) {
                         apply_active_context(
                             &ctx,
                             &context_bar_for_events,
+                            &home_page_for_events,
                             &workflow_for_events,
                             &projects_for_events,
                             &targets_for_events,
@@ -1613,6 +1797,7 @@ fn build_ui(app: &gtk::Application) {
                         apply_active_context(
                             &ctx,
                             &context_bar_for_events,
+                            &home_page_for_events,
                             &workflow_for_events,
                             &projects_for_events,
                             &targets_for_events,
@@ -1645,6 +1830,7 @@ fn build_ui(app: &gtk::Application) {
                             apply_active_context(
                                 &ctx,
                                 &context_bar_for_events,
+                                &home_page_for_events,
                                 &workflow_for_events,
                                 &projects_for_events,
                                 &targets_for_events,
@@ -1713,6 +1899,7 @@ fn build_ui(app: &gtk::Application) {
                         apply_active_context(
                             &ctx,
                             &context_bar_for_events,
+                            &home_page_for_events,
                             &workflow_for_events,
                             &projects_for_events,
                             &targets_for_events,
@@ -1795,6 +1982,21 @@ fn build_ui(app: &gtk::Application) {
         });
     }
 
-    window.set_child(Some(&root));
+    let background_layer = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    background_layer.add_css_class("apkw-solid-background");
+    background_layer.set_hexpand(true);
+    background_layer.set_vexpand(true);
+    background_layer.set_opacity(1.0);
+
+    let shell = gtk::Overlay::new();
+    shell.add_css_class("apkw-shell");
+    shell.set_hexpand(true);
+    shell.set_vexpand(true);
+    shell.set_opacity(1.0);
+    shell.set_child(Some(&background_layer));
+    shell.add_overlay(&root);
+    shell.set_measure_overlay(&root, true);
+
+    window.set_child(Some(&shell));
     window.present();
 }

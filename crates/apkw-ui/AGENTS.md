@@ -27,6 +27,8 @@ Update this file whenever UI behavior changes or when commits touching this crat
 - Page layouts now use consistent section frames and spacing via helpers in `pages.rs` to improve scanability.
 - The GTK shell now loads an app-local CSS layer for the left rail, brand/context cards, page intro cards,
   section frames, and output panels so the UI keeps a consistent visual hierarchy without page-specific styling.
+- The GTK shell now paints an explicit background layer under the full UI and derives window/card/view colors from the active GTK theme with alpha forced to 1.0, so the desktop cannot show through behind the app even when compositor or theme color definitions are translucent.
+- The left rail is intentionally very compact: it currently uses half the previous narrowed width, keeps the brand copy at the top-left, stacks project actions (New Project / Open Project / Help) vertically to its right, and places workspace snapshot actions (Export Workspace / Import Workspace) side by side in a separate Workspace card below the Active context section.
 - Job stream output for service pages prints summary lines for state/progress/completion and decodes log chunks to text instead of raw payload bytes.
 - Settings includes opt-in telemetry toggles for writing local usage/crash reports (env overrides: APKW_TELEMETRY/APKW_TELEMETRY_CRASH).
 - Settings includes local state archive Save/Open/Reload controls with archive exclusions and zip path selection.
@@ -60,15 +62,17 @@ Update this file whenever UI behavior changes or when commits touching this crat
   bar between the main controls and the console output.
 - Each tab output panel now includes Copy output and Clear output controls above the log view.
 - The UI tracks an active context (project/toolchain set/target/run) persisted in ui-config, surfaces
-  it above the sidebar tab list, and applies it to Workflow/Projects/Targets/Build fields.
+  it above the sidebar tab list, and applies it to Job Control, Workflow, Projects, Targets, and Build fields.
+- The Active context card uses a horizontal scroller instead of ellipsizing values, so long project/toolchain/target/run identifiers can be panned inside the narrow left rail.
 - Per-tab UI state (inputs + log buffers) persists to `~/.local/share/apkw/state/ui-state.json`;
   reset-all-state clears it alongside cached UI fields while preserving installed toolchains/downloads
   and Cuttlefish data (keeps `state/toolchains.json`).
 - Workflow run responses, toolchain active set updates, and target default updates sync the active context.
-- The header actions include compact New project (reset-all-state clears local state/logs while preserving `toolchains`, `downloads`, `cuttlefish`, and `state/toolchains.json`, then opens the project folder picker; if the reset reports failure, the UI still clears active context and prompts for a project folder while warning in Projects/Settings) plus Save/Open state shortcuts that sit above the tab list and open the zip picker immediately with Settings exclusions.
-- The left rail now includes an app brand card and full-width workspace shortcut buttons; major
+- The header actions include compact New Project (reset-all-state clears local state/logs while preserving `toolchains`, `downloads`, `cuttlefish`, and `state/toolchains.json`, then opens the project folder picker; if the reset reports failure, the UI still clears active context and prompts for a project folder while warning in Projects/Settings), Open Project (folder picker + existing project open that also pushes the selected project id/path into the shared Job Control, Workflow, Projects, and Build context fields), and a Help/about button that sit in a compact vertical stack beside the brand copy.
+- The left rail now includes an app brand card, a compact top-row project action cluster, a separate Workspace card with side-by-side export/import snapshot actions, and full-width workflow buttons; major
   actions such as Start job, Run pipeline, Build, Create project, Start/Stop Cuttlefish, Install
-  APK, and Save state use consistent primary/destructive emphasis across pages.
+  APK, and Export Workspace use consistent primary/destructive emphasis across pages.
+- The Targets page now includes a visible Cuttlefish bundle hint that explains the 16K/manual-artifact case and points users at the default `~/.local/share/apkw/cuttlefish` bundle locations plus the explicit `APKW_CUTTLEFISH_IMAGES_DIR[_16K]` and `APKW_CUTTLEFISH_HOST_DIR[_16K]` overrides.
 
 ## Service coverage
 - Job Control: start arbitrary jobs (including workflow.pipeline) with params/ids + optional correlation id, watch job streams, live status panel.
@@ -117,6 +121,7 @@ Update this file whenever UI behavior changes or when commits touching this crat
 - UI logs append to in-memory state per AppEvent, and a periodic snapshot writes `ui-state.json` only when the captured UI state changes; the header Save state action forces a fresh snapshot before zipping the state directory.
 - Settings, Job History, and other tabs now route all major content blocks through the shared
   `section_frame` helper so spacing/padding stays uniform across the app.
+- The shared CSS and shell overlay keep the main window, stack, page scrollers, and log surfaces opaque while preserving the existing card/rail styling, avoiding transparent application backgrounds when launched via the packaged launcher or directly.
 - `AppEvent::ConfigReloaded` now boxes `AppConfig`, and `UiState`/`BuildState`/`SettingsState`/`AppState` derive `Default`; rustfmt import/whitespace cleanup applied (no behavior change).
 
 ## Prioritized TODO checklist by service
